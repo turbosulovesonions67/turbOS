@@ -4,7 +4,13 @@
 /* This OS kernel is subject to WEEKLY UPDATES!! */
 /* This project is dedicated towards the legendary Terrence Andrew Davis, (Terry!) who wrote an OS single handedly - TempleOS. Fly High, Captain! (RIP 2018) */
 
-/* The Code Goes here: Also I have not vibecoded, so no hate pls :) */
+/* The Code Goes here: */
+
+#include "gdt/gdt.h"
+#include "interrupts/idt.h"
+#include "drivers/ata.h"
+#include "drivers/pic.h"
+#include "drivers/pit.h"
 
 void outb(unsigned short port, unsigned char val);
 unsigned char inb(unsigned short port);
@@ -351,9 +357,18 @@ void update_pong()
         ball_dx = -1;
 }
 
-
 void kernel_main()
 {
+    gdt_init();
+
+    idt_init();
+  
+    /* __asm__ volatile("sti"); */
+    
+    pic_remap();
+    
+    pit_init(100);
+    
     draw_home();
 
     int last_sec = -1;
