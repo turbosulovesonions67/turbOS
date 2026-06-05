@@ -1,4 +1,7 @@
 # turbOS
+
+UNDER UPDATE UNDER UPDATE: i added gdt, idt!
+
 turbOS Operating system (hobby os): An OS I made for my learning. 
 I have made these using the following tools:
 
