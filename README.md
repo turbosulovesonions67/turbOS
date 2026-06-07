@@ -19,6 +19,6 @@ Also some FAQs:
 ###
     The bootloader: boot.asm does not directly load the kernel.c
 Also I would be developing the OS further for a filesystem (FAT32) and a CLI (Command line interface)
-This project is currently in version v0.1.
+This project is currently in version v0.1.41!
 
 Thank you!
