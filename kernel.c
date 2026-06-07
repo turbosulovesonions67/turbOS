@@ -20,10 +20,27 @@ void outw(unsigned short port, unsigned short val);
 #define SCREEN_SAVER  1
 #define SCREEN_EDITOR 2
 #define SCREEN_PONG   3
+#define SCREEN_TERMINAL 4
+
+void draw_home();
+void draw_editor();
+void draw_terminal();
+void handle_editor_key(unsigned char sc);
+void handle_terminal_key(unsigned char sc);
+void reboot();
+void shutdown();
 
 int current_screen = SCREEN_HOME;
 int ctrl_pressed = 0;
 int shift_pressed = 0;
+
+char terminal_input[80];
+int terminal_pos = 0;
+
+unsigned char home_color = 0x1F;
+
+char terminal_output[20][80];
+int output_lines = 0;
 
 int saver_counter = 0;
 unsigned int pong_tick = 0;
@@ -131,6 +148,34 @@ void print(const char* s, int r, int c, unsigned char color)
         put_char(s[i], r, c + i, color);
 }
 
+int strcmp(const char* a, const char* b)
+{
+    while(*a && *b)
+    {
+        if(*a != *b)
+            return 1;
+
+        a++;
+        b++;
+    }
+
+    return (*a != *b);
+}
+
+void terminal_print(const char* s)
+{
+    if(output_lines >= 20)
+        output_lines = 0;
+
+    int i;
+
+    for(i = 0; s[i] && i < 79; i++)
+        terminal_output[output_lines][i] = s[i];
+
+    terminal_output[output_lines][i] = 0;
+
+    output_lines++;
+}
 
 unsigned char cmos_read(unsigned char reg)
 {
@@ -225,7 +270,8 @@ void handle_editor_key(unsigned char sc)
     if(sc & 0x80) return;
 
     char c = scancode_table[sc];
-    if(!c) return;
+    if(sc == 0x39)   // SPACE key
+        c = ' ';
 
     if(shift_pressed)
     {
@@ -289,10 +335,120 @@ void handle_editor_key(unsigned char sc)
     }
 }
 
+void draw_terminal()
+{
+    clear_screen(0x00);
+
+    print("turbOS Terminal v0.1.42", 0, 0, 0x0F);
+    print("Type 'help' for commands", 1, 0, 0x07);
+
+    for(int i = 0; i < output_lines; i++)
+        print(terminal_output[i], 3 + i, 0, 0x07);
+
+    print(">", 4 + output_lines, 0, 0x0F);
+    print(terminal_input, 4 + output_lines, 2, 0x0F);
+}
+
+void execute_command()
+{
+    if(!strcmp(terminal_input, "help"))
+    {
+        terminal_print("help");
+        terminal_print("reboot");
+        terminal_print("powoff");
+        terminal_print("bg -c");
+        terminal_print("about");
+        terminal_print("time");
+        terminal_print("clear");
+        terminal_print("ver");
+        terminal_print("exit");
+    }
+    else if(!strcmp(terminal_input, "ver"))
+    {
+        terminal_print("turbOS v0.1.42");
+    }
+    else if(!strcmp(terminal_input, "about"))
+    {
+        terminal_print("turbOS v0.1.42");
+        terminal_print("Created by Turbosu Pramanik");
+        terminal_print("Designed for older computers");
+    }
+    else if(!strcmp(terminal_input, "clear"))
+    {
+        output_lines = 0;
+    }
+    else if(!strcmp(terminal_input, "time"))
+    {
+        terminal_print("Use Home screen clock");
+    }
+    else if(!strcmp(terminal_input, "exit"))
+    {
+        current_screen = SCREEN_HOME;
+        draw_home();
+        return;
+    }
+    else if(!strcmp(terminal_input, "reboot"))
+    {
+        reboot();
+    }
+    else if(!strcmp(terminal_input, "powoff"))
+    {
+        shutdown();
+    }
+    else if(!strcmp(terminal_input, "bg -c"))
+    {
+        home_color = 0x3F;
+        terminal_print("Background changed to cyan");
+    }
+    else
+    {
+        terminal_print("Unknown command");
+    }
+}
+
+void handle_terminal_key(unsigned char sc)
+{
+    if(sc & 0x80)
+        return;
+
+    char c = scancode_table[sc];
+
+    if(sc == 0x39)   // SPACE key
+        c = ' ';
+
+    if(c == '\b')
+    {
+        if(terminal_pos > 0)
+        {
+            terminal_pos--;
+            terminal_input[terminal_pos] = 0;
+        }
+
+        draw_terminal();
+        return;
+    }
+    if(c == '\n')
+    {
+        execute_command();
+
+        terminal_pos = 0;
+        terminal_input[0] = 0;
+
+        draw_terminal();
+        return;
+    }
+    if(terminal_pos < 79)
+    {
+        terminal_input[terminal_pos++] = c;
+        terminal_input[terminal_pos] = 0;
+    }
+
+    draw_terminal();
+}
 
 void draw_home()
 {
-    clear_screen(0x1F);
+    clear_screen(home_color);
 
     print("Welcome to turbOS!",0,0,0x0F);
 
@@ -309,8 +465,9 @@ void draw_home()
     print("Ctrl+2 Saver",8,0,0x0F);
     print("Ctrl+3 Editor",9,0,0x0F);
     print("Ctrl+4 Pong",10,0,0x0F);
-    print("Ctrl+9 Reboot",11,0,0x0F);
-    print("Ctrl+0 Shutdown",12,0,0x0F);
+    print("Ctrl+5 Terminal",11,0,0x0F);
+    print("Ctrl+9 Reboot",12,0,0x0F);
+    print("Ctrl+0 Shutdown",13,0,0x0F);
 }
 
 
@@ -362,13 +519,13 @@ void kernel_main()
     gdt_init();
 
     idt_init();
-  
-    /* __asm__ volatile("sti"); */
-    
+
     pic_remap();
-    
+
     pit_init(100);
-    
+
+    __asm__ volatile("sti");
+
     draw_home();
 
     int last_sec = -1;
@@ -378,6 +535,7 @@ void kernel_main()
         if(current_screen == SCREEN_HOME)
         {
             unsigned char s = bcd_to_bin(cmos_read(0x00));
+
             if(s != last_sec)
             {
                 last_sec = s;
@@ -388,9 +546,11 @@ void kernel_main()
         if(current_screen == SCREEN_SAVER)
         {
             saver_counter++;
+
             if(saver_counter > 180000)
             {
                 saver_counter = 0;
+
                 update_saver();
                 draw_saver();
             }
@@ -399,10 +559,12 @@ void kernel_main()
         if(current_screen == SCREEN_EDITOR)
         {
             cursor_tick++;
+
             if(cursor_tick > 40000)
             {
                 cursor_tick = 0;
                 cursor_visible = !cursor_visible;
+
                 draw_editor();
             }
         }
@@ -410,9 +572,11 @@ void kernel_main()
         if(current_screen == SCREEN_PONG)
         {
             pong_tick++;
+
             if(pong_tick > 120000)
             {
                 pong_tick = 0;
+
                 update_pong();
             }
         }
@@ -421,27 +585,83 @@ void kernel_main()
         {
             unsigned char sc = inb(0x60);
 
-            if(sc == 29) ctrl_pressed = 1;
-            if(sc == 157) ctrl_pressed = 0;
+            /* Ctrl state */
 
-            if(sc == 42 || sc == 54) shift_pressed = 1;
-            if(sc == 0xAA || sc == 0xB6) shift_pressed = 0;
+            if(sc == 29)
+                ctrl_pressed = 1;
 
-            if(ctrl_pressed && sc == 2) { current_screen = SCREEN_HOME; draw_home(); }
-            if(ctrl_pressed && sc == 3) { current_screen = SCREEN_SAVER; draw_saver(); }
-            if(ctrl_pressed && sc == 4) { current_screen = SCREEN_EDITOR; draw_editor(); }
-            if(ctrl_pressed && sc == 5) current_screen = SCREEN_PONG;
+            if(sc == 157)
+                ctrl_pressed = 0;
 
-            if(ctrl_pressed && sc == 10) reboot();
-            if(ctrl_pressed && sc == 11) shutdown();
+            /* Shift state */
+
+            if(sc == 42 || sc == 54)
+                shift_pressed = 1;
+
+            if(sc == 0xAA || sc == 0xB6)
+                shift_pressed = 0;
+
+            /* Screen switching */
+
+            if(ctrl_pressed && sc == 2)
+            {
+                current_screen = SCREEN_HOME;
+                draw_home();
+            }
+
+            if(ctrl_pressed && sc == 3)
+            {
+                current_screen = SCREEN_SAVER;
+                draw_saver();
+            }
+
+            if(ctrl_pressed && sc == 4)
+            {
+                current_screen = SCREEN_EDITOR;
+                draw_editor();
+            }
+
+            if(ctrl_pressed && sc == 5)
+            {
+                current_screen = SCREEN_PONG;
+
+                clear_screen(0x00);
+                update_pong();
+            }
+
+            if(ctrl_pressed && sc == 6)
+            {
+                current_screen = SCREEN_TERMINAL;
+                draw_terminal();
+            }
+
+            /* Power */
+
+            if(ctrl_pressed && sc == 10)
+                reboot();
+
+            if(ctrl_pressed && sc == 11)
+                shutdown();
+
+            /* Per-screen keyboard handlers */
 
             if(current_screen == SCREEN_EDITOR)
+            {
                 handle_editor_key(sc);
+            }
+
+            if(current_screen == SCREEN_TERMINAL)
+            {
+                handle_terminal_key(sc);
+            }
 
             if(current_screen == SCREEN_PONG)
             {
-                if(sc == 0x11 && paddle_y > 1) paddle_y--;
-                if(sc == 0x1F && paddle_y < 22) paddle_y++;
+                if(sc == 0x11 && paddle_y > 1)
+                    paddle_y--;
+
+                if(sc == 0x1F && paddle_y < 22)
+                    paddle_y++;
             }
         }
     }
