@@ -12,6 +12,9 @@
 #include "drivers/pic.h"
 #include "drivers/pit.h"
 
+const char* username = "liveuser";
+const char* hostname = "turbOS";
+
 void outb(unsigned short port, unsigned char val);
 unsigned char inb(unsigned short port);
 void outw(unsigned short port, unsigned short val);
@@ -33,6 +36,9 @@ void shutdown();
 int current_screen = SCREEN_HOME;
 int ctrl_pressed = 0;
 int shift_pressed = 0;
+
+char cmd_buffer[80];
+char arg_buffer[80];
 
 char terminal_input[80];
 int terminal_pos = 0;
@@ -161,6 +167,35 @@ int strcmp(const char* a, const char* b)
 
     return (*a != *b);
 }
+
+int strlen(const char* s)
+{
+    int i = 0;
+    while (s[i]) i++;
+    return i;
+}
+
+void cmd_help();
+void cmd_ver();
+void cmd_clear();
+void cmd_time();
+void cmd_reboot();
+void cmd_powoff();
+void cmd_about();
+void cmd_exit();
+
+char* skip_spaces(char* s)
+{
+    while(*s == ' ') s++;
+    return s;
+}
+
+typedef void (*cmd_func)(void);
+
+typedef struct {
+    const char* name;
+    cmd_func func;
+} command_t;
 
 void terminal_print(const char* s)
 {
@@ -335,6 +370,51 @@ void handle_editor_key(unsigned char sc)
     }
 }
 
+void cmd_help()
+{
+    terminal_print("turbcmd commands:");
+    terminal_print("help, ver, clear, time");
+    terminal_print("reboot, powoff, about, exit");
+}
+
+void cmd_ver()
+{
+    terminal_print("turbOS v0.1.42");
+}
+
+void cmd_clear()
+{
+    output_lines = 0;
+}
+
+void cmd_time()
+{
+    terminal_print("Use home screen clock");
+}
+
+void cmd_reboot()
+{
+    reboot();
+}
+
+void cmd_powoff()
+{
+    shutdown();
+}
+
+void cmd_about()
+{
+    terminal_print("turbOS v0.1.42");
+    terminal_print("Created by Turbosu Pramanik");
+    terminal_print("Designed for older computers");
+}
+
+void cmd_exit()
+{
+    current_screen = SCREEN_HOME;
+    draw_home();
+}
+
 void draw_terminal()
 {
     clear_screen(0x00);
@@ -345,8 +425,25 @@ void draw_terminal()
     for(int i = 0; i < output_lines; i++)
         print(terminal_output[i], 3 + i, 0, 0x07);
 
-    print(">", 4 + output_lines, 0, 0x0F);
-    print(terminal_input, 4 + output_lines, 2, 0x0F);
+    int row = 4 + output_lines;
+    int col = 0;
+
+    print(username, row, col, 0x0F);
+    col += strlen(username);
+
+    print("@", row, col, 0x0F);
+    col += 1;
+
+    print(hostname, row, col, 0x0F);
+    col += strlen(hostname);
+
+    print(">", row, col, 0x0F);
+    col += 2;
+
+    print(" ", row, col, 0x0F);
+    col += 1;
+
+    print(terminal_input, row, col, 0x0F);
 }
 
 void execute_command()
@@ -405,6 +502,7 @@ void execute_command()
         terminal_print("Unknown command");
     }
 }
+
 
 void handle_terminal_key(unsigned char sc)
 {
@@ -473,15 +571,39 @@ void draw_home()
 
 void update_pong()
 {
-    for(int r=1;r<25;r++)
-        for(int c=0;c<80;c++)
-            put_char(' ',r,c,0x00);
+    for(int r = 1; r < 25; r++)
+        for(int c = 0; c < 80; c++)
+            put_char(' ', r, c, 0x00);
 
-    print("PONG",0,0,0x0F);
+    print("PONG", 0, 0, 0x0F);
 
-    char s[2]={ '0'+score,0 };
-    print("Score:",0,60,0x0F);
-    print(s,0,67,0x0F);
+    char s[10];
+    int temp = score;
+    int i = 0;
+
+    if(temp == 0)
+    {
+        s[i++] = '0';
+    }
+    else
+    {
+        char rev[10];
+        int j = 0;
+
+        while(temp > 0)
+        {
+            rev[j++] = '0' + (temp % 10);
+            temp /= 10;
+        }
+
+        while(j > 0)
+            s[i++] = rev[--j];
+    }
+
+    s[i] = 0;
+
+    print("Score:", 0, 60, 0x0F);
+    print(s, 0, 67, 0x0F);
 
     put_char('#', paddle_y, 2, 0x0F);
     put_char('#', paddle_y+1, 2, 0x0F);
@@ -492,12 +614,22 @@ void update_pong()
     ball_x += ball_dx;
     ball_y += ball_dy;
 
-    if(ball_y <= 1 || ball_y >= 24) ball_dy = -ball_dy;
-
-    if(ball_x <= 3)
+    if(ball_y <= 1)
     {
-        if(ball_y >= paddle_y && ball_y <= paddle_y+2)
+        ball_y = 1;
+        ball_dy = 1;
+    }
+    else if(ball_y >= 24)
+    {
+        ball_y = 24;
+        ball_dy = -1;
+    }
+
+    if(ball_x <= 3 && ball_dx < 0)
+    {
+        if(ball_y >= paddle_y && ball_y <= paddle_y + 2)
         {
+            ball_x = 3;
             ball_dx = 1;
             score++;
         }
@@ -506,12 +638,16 @@ void update_pong()
             ball_x = 70;
             ball_y = 12;
             ball_dx = -1;
+            ball_dy = (ball_y % 2 == 0) ? 1 : -1;
             score = 0;
         }
     }
 
     if(ball_x >= 79)
+    {
+        ball_x = 79;
         ball_dx = -1;
+    }
 }
 
 void kernel_main()
