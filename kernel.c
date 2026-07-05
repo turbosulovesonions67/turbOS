@@ -11,6 +11,7 @@
 #include "drivers/ata.h"
 #include "drivers/pic.h"
 #include "drivers/pit.h"
+#include "fs/vfs.h"
 
 const char* username = "liveuser";
 const char* hostname = "turbOS";
@@ -24,12 +25,20 @@ void outw(unsigned short port, unsigned short val);
 #define SCREEN_EDITOR 2
 #define SCREEN_PONG   3
 #define SCREEN_TERMINAL 4
+#define SCREEN_FILEMANAGER 5
+#define MAX_FILES 32
+
+int fm_index = 0;
+vfs_node_t* fm_dir;
 
 void draw_home();
 void draw_editor();
 void draw_terminal();
 void handle_editor_key(unsigned char sc);
 void handle_terminal_key(unsigned char sc);
+void editor_open_file(vfs_node_t* file);
+void editor_save();
+
 void reboot();
 void shutdown();
 
@@ -58,13 +67,18 @@ int saver_y = 10;
 int saver_dx = 1;
 int saver_dy = 1;
 
-#define MAX_LINES 25
+#define MAX_LINES 512
 #define MAX_COLS 80
 
 char editor_lines[MAX_LINES][MAX_COLS];
+
 int editor_row = 0;
 int editor_col = 0;
 
+int editor_scroll_y = 0;
+int editor_scroll_x = 0;
+
+vfs_node_t* editor_file = 0;
 
 int ball_x = 70;
 int ball_y = 12;
@@ -286,26 +300,103 @@ void draw_saver()
 }
 
 
+void draw_editor_cursor()
+{
+    int sy = editor_row - editor_scroll_y + 2;
+    int sx = editor_col - editor_scroll_x;
+
+    if(sy < 2 || sy >= 25 || sx < 0 || sx >= 80)
+        return;
+
+    if(cursor_visible)
+        put_char('_', sy, sx, 0x0F);
+    else
+        put_char(editor_lines[editor_row][editor_col], sy, sx, 0x0F);
+}
+
 void draw_editor()
 {
     clear_screen(0x07);
     print("turbOS Editor",0,0,0x0F);
 
-    for(int r=0;r<MAX_LINES;r++)
-        for(int c=0;c<MAX_COLS;c++)
-            put_char(editor_lines[r][c],r+2,c,0x0F);
+    for(int r = 0; r < 23; r++)
+    {
+        int line = r + editor_scroll_y;
+
+        if(line >= MAX_LINES)
+            break;
+
+        for(int c = 0; c < 80; c++)
+        {
+            int col = c + editor_scroll_x;
+
+            if(col >= MAX_COLS)
+                break;
+
+            put_char(editor_lines[line][col], r + 2, c, 0x0F);
+        }
+    }
 
     if(cursor_visible)
-        put_char('_', editor_row+2, editor_col, 0x0F);
+    {
+        int sy = editor_row - editor_scroll_y + 2;
+        int sx = editor_col - editor_scroll_x;
+
+        if(sy >= 2 && sy < 25 && sx >= 0 && sx < 80)
+            put_char('_', sy, sx, 0x0F);
+    }
 }
 
 void handle_editor_key(unsigned char sc)
 {
+    if(ctrl_pressed && sc == 0x1F) // S
+    {
+        editor_save();
+        return;
+    }
+
     if(ctrl_pressed) return;
     if(sc & 0x80) return;
 
     char c = scancode_table[sc];
-    if(sc == 0x39)   // SPACE key
+    
+    if(sc == 0x48)
+    {
+        if(editor_row > 0)
+            editor_row--;
+
+        draw_editor();
+        return;
+    }
+
+    if(sc == 0x50)
+    {
+        if(editor_row < MAX_LINES - 1)
+            editor_row++;
+
+        draw_editor();
+        return;
+    }
+
+    if(sc == 0x4B)
+    {
+        if(editor_col > 0)
+            editor_col--;
+
+        draw_editor();
+        return;
+    }
+
+    if(sc == 0x4D)
+    {
+        if(editor_col < MAX_COLS - 1)
+            editor_col++;
+
+        draw_editor();
+        return;
+    }
+
+    if(sc == 0x39)   
         c = ' ';
 
     if(shift_pressed)
@@ -370,6 +461,137 @@ void handle_editor_key(unsigned char sc)
     }
 }
 
+void editor_save()
+{
+    if(!editor_file) return;
+
+    int k = 0;
+
+    for(int r = 0; r < MAX_LINES; r++)
+    {
+        for(int c = 0; c < MAX_COLS; c++)
+        {
+            editor_file->data[k++] = editor_lines[r][c];
+        }
+    }
+
+    editor_file->data[k] = 0;
+}
+
+void editor_open_file(vfs_node_t* file)
+{
+    editor_file = file;
+
+    editor_row = 0;
+    editor_col = 0;
+    
+    editor_scroll_y = 0;
+    editor_scroll_x = 0;
+
+    for(int r = 0; r < MAX_LINES; r++)
+        for(int c = 0; c < MAX_COLS; c++)
+            editor_lines[r][c] = ' ';
+
+    int i = 0;
+    int r = 0, c = 0;
+
+    while(file->data[i] && i < MAX_LINES * MAX_COLS)
+    {
+        editor_lines[r][c] = file->data[i];
+
+        c++;
+        if(c >= MAX_COLS)
+        {
+            c = 0;
+            r++;
+        }
+
+        i++;
+    }
+
+    current_screen = SCREEN_EDITOR;
+    draw_editor();
+}
+
+void draw_file_manager()
+{
+    clear_screen(0x00);
+
+    print("turbOS File Manager", 0, 0, 0x0F);
+
+    vfs_node_t* cur = fm_dir->child;
+
+    int i = 0;
+
+    while(cur && i < 25)
+    {
+        if(i == fm_index)
+            print(" > ", i+2, 0, 0x0F);
+        else
+            print("   ", i+2, 0, 0x07);
+
+        if(cur->is_dir)
+    {
+        print("[DIR] ", i+2, 3, 0x0E);
+        print(cur->name, i+2, 9, 0x07);
+    }
+    else
+    {
+        print("[FILE]", i+2, 3, 0x0A);
+        print(cur->name, i+2, 9, 0x07);
+    }
+
+        cur = cur->next;
+        i++;
+    }
+}
+
+
+void handle_file_manager_key(unsigned char sc)
+{
+    if(sc & 0x80) return;
+
+    int count = vfs_count_children(fm_dir);
+
+    if(sc == 0x48)
+    {
+        if(fm_index > 0)
+            fm_index--;
+    }
+
+    if(sc == 0x50)
+    {
+        if(fm_index < count - 1)
+            fm_index++;
+    }
+    
+    if(sc == 0x1C)
+    {
+        vfs_node_t* sel = vfs_get_child(fm_dir, fm_index);
+
+        if(!sel) return;
+
+        if(sel->is_dir)
+        {
+            fm_dir = sel;
+            fm_index = 0;
+        }
+        else
+        {
+            editor_open_file(sel);
+        }
+    }
+    if(sc == 0x0E)
+    {
+        if(fm_dir && fm_dir->parent)
+        {
+            fm_dir = fm_dir->parent;
+            fm_index = 0;
+        }
+    }
+
+    draw_file_manager();
+}
 void cmd_help()
 {
     terminal_print("turbcmd commands:");
@@ -446,6 +668,22 @@ void draw_terminal()
     print(terminal_input, row, col, 0x0F);
 }
 
+void cmd_fetch()
+{
+    terminal_print("        ttt     \\\\");
+    terminal_print("        tttttt   \\\\");
+    terminal_print("        ttt       \\\\");
+    terminal_print("         ttttttt   \\\\");
+
+    terminal_print("");
+    terminal_print("turbOS v0.1.42");
+    terminal_print("Kernel : turboX-32bit");
+    terminal_print("Arch   : i386");
+    terminal_print("Shell  : turbCMD!");
+    terminal_print("User   : liveuser");
+    terminal_print("Host   : turbOS");
+}
+
 void execute_command()
 {
     if(!strcmp(terminal_input, "help"))
@@ -459,6 +697,7 @@ void execute_command()
         terminal_print("clear");
         terminal_print("ver");
         terminal_print("exit");
+        terminal_print("fetch");
     }
     else if(!strcmp(terminal_input, "ver"))
     {
@@ -497,9 +736,13 @@ void execute_command()
         home_color = 0x3F;
         terminal_print("Background changed to cyan");
     }
+    else if(!strcmp(terminal_input, "fetch"))
+    {
+        cmd_fetch();
+    }
     else
     {
-        terminal_print("Unknown command");
+        terminal_print("turbCMD!: Unknown command");
     }
 }
 
@@ -564,8 +807,9 @@ void draw_home()
     print("Ctrl+3 Editor",9,0,0x0F);
     print("Ctrl+4 Pong",10,0,0x0F);
     print("Ctrl+5 Terminal",11,0,0x0F);
-    print("Ctrl+9 Reboot",12,0,0x0F);
-    print("Ctrl+0 Shutdown",13,0,0x0F);
+    print("Ctrl+6 File Manager",12,0,0x0F);
+    print("Ctrl+9 Reboot",13,0,0x0F);
+    print("Ctrl+0 Shutdown",14,0,0x0F);
 }
 
 
@@ -663,6 +907,10 @@ void kernel_main()
     __asm__ volatile("sti");
 
     draw_home();
+    
+    vfs_init();
+    fm_dir = vfs_get_root();
+    fm_index = 0;
 
     int last_sec = -1;
 
@@ -704,7 +952,6 @@ void kernel_main()
                 draw_editor();
             }
         }
-
         if(current_screen == SCREEN_PONG)
         {
             pong_tick++;
@@ -716,12 +963,10 @@ void kernel_main()
                 update_pong();
             }
         }
-
+        
         if(inb(0x64) & 1)
         {
             unsigned char sc = inb(0x60);
-
-            /* Ctrl state */
 
             if(sc == 29)
                 ctrl_pressed = 1;
@@ -729,7 +974,6 @@ void kernel_main()
             if(sc == 157)
                 ctrl_pressed = 0;
 
-            /* Shift state */
 
             if(sc == 42 || sc == 54)
                 shift_pressed = 1;
@@ -737,7 +981,6 @@ void kernel_main()
             if(sc == 0xAA || sc == 0xB6)
                 shift_pressed = 0;
 
-            /* Screen switching */
 
             if(ctrl_pressed && sc == 2)
             {
@@ -770,16 +1013,18 @@ void kernel_main()
                 current_screen = SCREEN_TERMINAL;
                 draw_terminal();
             }
-
-            /* Power */
+            
+            if(ctrl_pressed && sc == 7)
+            {
+                current_screen = SCREEN_FILEMANAGER;
+                draw_file_manager();
+            }
 
             if(ctrl_pressed && sc == 10)
                 reboot();
 
             if(ctrl_pressed && sc == 11)
                 shutdown();
-
-            /* Per-screen keyboard handlers */
 
             if(current_screen == SCREEN_EDITOR)
             {
@@ -790,7 +1035,13 @@ void kernel_main()
             {
                 handle_terminal_key(sc);
             }
+            
+            if(current_screen == SCREEN_FILEMANAGER)
+            {
+                handle_file_manager_key(sc);
+            }
 
+            
             if(current_screen == SCREEN_PONG)
             {
                 if(sc == 0x11 && paddle_y > 1)
@@ -802,6 +1053,7 @@ void kernel_main()
         }
     }
 }
+
 
 void outb(unsigned short p, unsigned char v)
 { __asm__ volatile("outb %0,%1"::"a"(v),"Nd"(p)); }
