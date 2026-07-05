@@ -641,7 +641,7 @@ void draw_terminal()
 {
     clear_screen(0x00);
 
-    print("turbOS Terminal v0.1.42", 0, 0, 0x0F);
+    print("turbOS Terminal v0.1.5", 0, 0, 0x0F);
     print("Type 'help' for commands", 1, 0, 0x07);
 
     for(int i = 0; i < output_lines; i++)
@@ -676,7 +676,7 @@ void cmd_fetch()
     terminal_print("         ttttttt   \\\\");
 
     terminal_print("");
-    terminal_print("turbOS v0.1.42");
+    terminal_print("turbOS v0.1.5");
     terminal_print("Kernel : turboX-32bit");
     terminal_print("Arch   : i386");
     terminal_print("Shell  : turbCMD!");
@@ -701,11 +701,11 @@ void execute_command()
     }
     else if(!strcmp(terminal_input, "ver"))
     {
-        terminal_print("turbOS v0.1.42");
+        terminal_print("turbOS v0.1.5");
     }
     else if(!strcmp(terminal_input, "about"))
     {
-        terminal_print("turbOS v0.1.42");
+        terminal_print("turbOS v0.1.5");
         terminal_print("Created by Turbosu Pramanik");
         terminal_print("Designed for older computers");
     }
