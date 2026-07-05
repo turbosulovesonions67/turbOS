@@ -10,7 +10,10 @@ boot.o: boot.asm
 	$(AS) -f elf32 boot.asm -o boot.o
 
 kernel.o: kernel.c
-	$(CC) $(CFLAGS) -c kernel.c -o kernel.o
+	$(CC) $(CFLAGS) -c kernel.c -o kernel.o -I.
+
+fs/vfs.o: fs/vfs.c fs/vfs.h
+	$(CC) $(CFLAGS) -c fs/vfs.c -o fs/vfs.o -I.
 
 drivers/ata.o: drivers/ata.c drivers/ata.h
 	$(CC) $(CFLAGS) -c drivers/ata.c -o drivers/ata.o
@@ -36,6 +39,7 @@ gdt/gdt_asm.o: gdt/gdt.asm
 kernel.bin: \
 	boot.o \
 	kernel.o \
+	fs/vfs.o \
 	drivers/ata.o \
 	drivers/pic.o \
 	drivers/pit.o \
@@ -46,6 +50,7 @@ kernel.bin: \
 	$(CC) $(LDFLAGS) \
 	boot.o \
 	kernel.o \
+	fs/vfs.o \
 	drivers/ata.o \
 	drivers/pic.o \
 	drivers/pit.o \
@@ -63,6 +68,7 @@ iso:
 
 clean:
 	rm -rf *.o
+	rm -rf fs/*.o
 	rm -rf drivers/*.o
 	rm -rf interrupts/*.o
 	rm -rf gdt/*.o
@@ -72,3 +78,5 @@ clean:
 
 run:
 	qemu-system-i386 -cdrom turbOS.iso -m 512M
+
+#long, right?
