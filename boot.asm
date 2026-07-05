@@ -1,13 +1,14 @@
 section .multiboot2
 align 8
 header_start:
-    dd 0xe85250d6                ; magic
-    dd 0                         ; i386 architecture
-    dd header_end - header_start ; header length
-    dd 0x100000000 - (0xe85250d6 + 0 + (header_end - header_start)) ; checksum
+    dd 0xe85250d6                
+    dd 0                         
+    dd header_end - header_start 
+    dd 0x100000000 - (0xe85250d6 + 0 + (header_end - header_start)) 
 
-    ; End tag
-    dw 0                         ; type = end
-    dw 0                         ; flags
-    dd 8                         ; size
+    dw 0                       
+    dw 0                       
+    dd 8                       
 header_end:
+
+;This bootloader was assisted by AI, as I had some problems :)
