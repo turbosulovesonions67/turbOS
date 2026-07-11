@@ -904,8 +904,6 @@ void kernel_main()
 
     pit_init(100);
 
-    __asm__ volatile("sti");
-
     draw_home();
     
     vfs_init();
