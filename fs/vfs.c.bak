@@ -1,0 +1,212 @@
+#include "vfs.h"
+
+static vfs_node_t vfs_pool[VFS_MAX_NODES];
+static int vfs_used;
+static vfs_node_t *root;
+
+static int copy_name(char *dst, const char *src)
+{
+    int i = 0;
+
+    while(src[i] && i < 31)
+    {
+        dst[i] = src[i];
+        i++;
+    }
+
+    dst[i] = 0;
+
+    return i;
+}
+
+static vfs_node_t *vfs_alloc(void)
+{
+    if(vfs_used >= VFS_MAX_NODES)
+        return 0;
+
+    vfs_node_t *node = &vfs_pool[vfs_used++];
+
+    for(int i = 0; i < (int)sizeof(vfs_node_t); i++)
+        ((unsigned char *)node)[i] = 0;
+
+    return node;
+}
+
+vfs_node_t *vfs_get_root(void)
+{
+    return root;
+}
+
+vfs_node_t *vfs_create(
+    vfs_node_t *parent,
+    const char *name,
+    int is_dir)
+{
+    vfs_node_t *node = vfs_alloc();
+
+    if(!node)
+        return 0;
+
+    copy_name(node->name, name);
+
+    node->is_dir = is_dir;
+    node->parent = parent;
+
+    if(parent)
+    {
+        if(!parent->child)
+            parent->child = node;
+        else
+        {
+            vfs_node_t *last = parent->child;
+
+            while(last->next)
+                last = last->next;
+
+            last->next = node;
+        }
+    }
+
+    return node;
+}
+
+vfs_node_t *vfs_create_file(
+    vfs_node_t *parent,
+    const char *name)
+{
+    return vfs_create(parent, name, 0);
+}
+
+vfs_node_t *vfs_create_dir(
+    vfs_node_t *parent,
+    const char *name)
+{
+    return vfs_create(parent, name, 1);
+}
+
+int vfs_count_children(vfs_node_t *dir)
+{
+    int count = 0;
+
+    if(!dir)
+        return 0;
+
+    vfs_node_t *node = dir->child;
+
+    while(node)
+    {
+        count++;
+        node = node->next;
+    }
+
+    return count;
+}
+
+vfs_node_t *vfs_get_child(vfs_node_t *dir, int index)
+{
+    if(!dir || index < 0)
+        return 0;
+
+    vfs_node_t *node = dir->child;
+
+    while(node && index--)
+        node = node->next;
+
+    return node;
+}
+
+vfs_node_t *vfs_find(
+    vfs_node_t *dir,
+    const char *name)
+{
+    if(!dir)
+        return 0;
+
+    vfs_node_t *node = dir->child;
+
+    while(node)
+    {
+        int i = 0;
+
+        while(node->name[i] &&
+              name[i] &&
+              node->name[i] == name[i])
+            i++;
+
+        if(node->name[i] == 0 && name[i] == 0)
+            return node;
+
+        node = node->next;
+    }
+
+    return 0;
+}
+
+int vfs_rename(
+    vfs_node_t *node,
+    const char *name)
+{
+    if(!node)
+        return 0;
+
+    copy_name(node->name, name);
+
+    return 1;
+}
+
+int vfs_delete(vfs_node_t *node)
+{
+    if(!node || node == root)
+        return 0;
+
+    if(node->child)
+        return 0;
+
+    if(node->parent)
+    {
+        vfs_node_t *cur = node->parent->child;
+        vfs_node_t *prev = 0;
+
+        while(cur && cur != node)
+        {
+            prev = cur;
+            cur = cur->next;
+        }
+
+        if(cur == node)
+        {
+            if(prev)
+                prev->next = cur->next;
+            else
+                node->parent->child = cur->next;
+        }
+    }
+
+    node->parent = 0;
+    node->next = 0;
+
+    return 1;
+}
+
+void vfs_init(void)
+{
+    vfs_used = 0;
+
+    root = vfs_create_dir(0, "/");
+
+    vfs_node_t *home =
+        vfs_create_dir(root, "home");
+
+    vfs_node_t *readme =
+        vfs_create_file(home, "readme.txt");
+
+    vfs_create_file(home, "config.sys");
+
+    if(readme)
+    {
+        readme->data[0] = 'H';
+        readme->data[1] = 'i';
+        readme->data[2] = 0;
+        readme->size = 2;
+    }
+}

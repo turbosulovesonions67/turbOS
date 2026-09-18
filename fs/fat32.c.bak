@@ -1,0 +1,65 @@
+#include "fat32.h"
+#include "../drivers/ata.h"
+
+static unsigned short rd16(const unsigned char *p)
+{
+    return (unsigned short)p[0] | ((unsigned short)p[1] << 8);
+}
+
+static unsigned int rd32(const unsigned char *p)
+{
+    return (unsigned int)p[0] |
+           ((unsigned int)p[1] << 8) |
+           ((unsigned int)p[2] << 16) |
+           ((unsigned int)p[3] << 24);
+}
+
+int fat32_mount(fat32_fs_t *fs, unsigned int partition_lba)
+{
+    unsigned char sector[512];
+
+    if(!ata_read_sector(partition_lba, sector))
+        return 0;
+
+    if(sector[510] != 0x55 || sector[511] != 0xAA)
+        return 0;
+
+    if(sector[0x52] != 'F' ||
+       sector[0x53] != 'A' ||
+       sector[0x54] != 'T' ||
+       sector[0x55] != '3' ||
+       sector[0x56] != '2')
+        return 0;
+
+    unsigned int reserved = rd16(&sector[14]);
+    unsigned int fats = sector[16];
+    unsigned int sectors_per_fat = rd32(&sector[36]);
+    unsigned int sectors_per_cluster = sector[13];
+    unsigned int root_cluster = rd32(&sector[44]);
+
+    if(sectors_per_cluster == 0 || sectors_per_fat == 0)
+        return 0;
+
+    fs->mounted = 1;
+    fs->partition_lba = partition_lba;
+    fs->fat_lba = partition_lba + reserved;
+    fs->data_lba =
+        partition_lba +
+        reserved +
+        fats * sectors_per_fat;
+    fs->sectors_per_cluster = sectors_per_cluster;
+    fs->root_cluster = root_cluster;
+
+    return 1;
+}
+
+unsigned int fat32_cluster_lba(
+    const fat32_fs_t *fs,
+    unsigned int cluster)
+{
+    if(!fs || !fs->mounted || cluster < 2)
+        return 0;
+
+    return fs->data_lba +
+           (cluster - 2) * fs->sectors_per_cluster;
+}

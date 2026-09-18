@@ -1,0 +1,17 @@
+#ifndef FAT32_H
+#define FAT32_H
+
+typedef struct
+{
+    int mounted;
+    unsigned int partition_lba;
+    unsigned int fat_lba;
+    unsigned int data_lba;
+    unsigned int sectors_per_cluster;
+    unsigned int root_cluster;
+} fat32_fs_t;
+
+int fat32_mount(fat32_fs_t *fs, unsigned int partition_lba);
+unsigned int fat32_cluster_lba(const fat32_fs_t *fs, unsigned int cluster);
+
+#endif
