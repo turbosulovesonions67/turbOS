@@ -1,6 +1,6 @@
 # turbOS
 
-UNDER UPDATE UNDER UPDATE: I added a terminal and made the OS accept space key entry!
+UNDER UPDATE UNDER UPDATE: I added a working FAT32 Filesystem les goo!
 
 turbOS Operating system (hobby os): An OS I made for my learning. 
 I have made these using the following tools:
@@ -19,6 +19,6 @@ Also some FAQs:
 ###
     The bootloader: boot.asm does not directly load the kernel.c
 Also I would be developing the OS further for a filesystem (FAT32) and a CLI (Command line interface)
-This project is currently in version v0.1.5!
+This project is currently in version v0.2 with bootable disks...
 
 Thank you!
