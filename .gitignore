@@ -1,0 +1,13 @@
+turbOS-disk.img
+qemu-usb-test.img
+*.o
+kernel.bin
+turbOS.iso
+isodir/
+disk-root/
+*.img
+*.iso
+*.o
+kernel.bin
+isodir/
+disk-root/

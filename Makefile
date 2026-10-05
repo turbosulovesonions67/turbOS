@@ -5,7 +5,8 @@ CFLAGS = -ffreestanding -m32 -g -O0 -Wall -Wextra -I.
 LDFLAGS = -T linker.ld -m32 -nostdlib -lgcc
 
 C_SRC = \
-	kernel.c \
+	kernel/main.c \
+	kernel/state.c \
 	fs/vfs.c \
 	fs/fat32.c \
 	drivers/vga.c \
@@ -16,7 +17,15 @@ C_SRC = \
 	drivers/pic.c \
 	drivers/pit.c \
 	interrupts/idt.c \
-	gdt/gdt.c
+	gdt/gdt.c \
+	time/rtc.c \
+	power/power.c \
+	ui/home.c \
+	ui/saver.c \
+	ui/editor.c \
+	ui/terminal.c \
+	ui/filemanager.c \
+	ui/pong.c
 
 C_OBJ = $(C_SRC:.c=.o)
 

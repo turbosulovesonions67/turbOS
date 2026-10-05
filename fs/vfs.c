@@ -60,36 +60,6 @@ static void link_node(
     last->next = node;
 }
 
-static vfs_node_t *load_node(
-    vfs_node_t *parent,
-    const char *name,
-    int is_dir,
-    unsigned int first_cluster,
-    unsigned int lba,
-    unsigned int offset,
-    unsigned int size)
-{
-    vfs_node_t *node = vfs_alloc();
-
-    if(!node)
-        return 0;
-
-    copy_name(node->name, name);
-
-    node->is_dir = is_dir;
-    node->first_cluster = first_cluster;
-    node->dir_entry_lba = lba;
-    node->dir_entry_offset = offset;
-    node->size = size;
-
-    link_node(parent, node);
-
-    if(!is_dir && size)
-        vfs_read(node);
-
-    return node;
-}
-
 static void make_name(
     const unsigned char *entry,
     char *out)
@@ -126,6 +96,22 @@ static void make_name(
     }
 }
 
+static int is_dot_entry(
+    const unsigned char *entry)
+{
+    if(entry[0] != '.')
+        return 0;
+
+    if(entry[1] == ' ')
+        return 1;
+
+    if(entry[1] == '.' &&
+       entry[2] == ' ')
+        return 1;
+
+    return 0;
+}
+
 static int load_directory(vfs_node_t *dir)
 {
     if(!vfs_fs || !dir)
@@ -137,9 +123,7 @@ static int load_directory(vfs_node_t *dir)
     while(cluster >= 2)
     {
         unsigned int base =
-            fat32_cluster_lba(
-                vfs_fs,
-                cluster);
+            fat32_cluster_lba(vfs_fs, cluster);
 
         for(unsigned int s = 0;
             s < vfs_fs->sectors_per_cluster;
@@ -168,17 +152,13 @@ static int load_directory(vfs_node_t *dir)
                 unsigned char attr =
                     sector[off + 11];
 
-                if(attr == 0x0F)
-                    continue;
-
-                if(attr & 0x08)
-                    continue;
-
-                if(sector[off] == '.' ||
-                   sector[off] == '.')
+                if(attr == 0x0F ||
+                   attr & 0x08 ||
+                   is_dot_entry(&sector[off]))
                     continue;
 
                 char name[32];
+
                 make_name(
                     &sector[off],
                     name);
@@ -204,17 +184,22 @@ static int load_directory(vfs_node_t *dir)
                         sector[off + 31] << 24);
 
                 vfs_node_t *node =
-                    load_node(
-                        dir,
-                        name,
-                        (attr & 0x10) != 0,
-                        first_cluster,
-                        base + s,
-                        off,
-                        size);
+                    vfs_alloc();
 
                 if(!node)
                     return 0;
+
+                copy_name(node->name, name);
+                node->is_dir = (attr & 0x10) != 0;
+                node->first_cluster = first_cluster;
+                node->dir_entry_lba = base + s;
+                node->dir_entry_offset = off;
+                node->size = size;
+
+                link_node(dir, node);
+
+                if(!node->is_dir && size)
+                    vfs_read(node);
 
                 if(node->is_dir &&
                    first_cluster >= 2)
@@ -250,25 +235,21 @@ vfs_node_t *vfs_create(
     const char *name,
     int is_dir)
 {
-    if(!parent || !name)
+    unsigned int cluster = 0;
+    unsigned int lba = 0;
+    unsigned int offset = 0;
+
+    if(!parent ||
+       !parent->is_dir ||
+       !name ||
+       !name[0])
         return 0;
 
     if(vfs_find(parent, name))
         return 0;
 
-    vfs_node_t *node = vfs_alloc();
-
-    if(!node)
-        return 0;
-
-    copy_name(node->name, name);
-    node->is_dir = is_dir;
-    node->parent = parent;
-
     if(vfs_fs)
     {
-        unsigned int cluster = 0;
-
         if(is_dir)
         {
             cluster =
@@ -285,19 +266,37 @@ vfs_node_t *vfs_create(
                 is_dir,
                 cluster,
                 0,
-                &node->dir_entry_lba,
-                &node->dir_entry_offset))
+                &lba,
+                &offset))
         {
             if(cluster)
-                fat32_free_chain(
-                    vfs_fs,
-                    cluster);
+                fat32_free_chain(vfs_fs, cluster);
 
             return 0;
         }
-
-        node->first_cluster = cluster;
     }
+
+    vfs_node_t *node = vfs_alloc();
+
+    if(!node)
+    {
+        if(vfs_fs)
+        {
+            fat32_delete_entry(
+                vfs_fs,
+                lba,
+                offset,
+                cluster);
+        }
+
+        return 0;
+    }
+
+    copy_name(node->name, name);
+    node->is_dir = is_dir;
+    node->first_cluster = cluster;
+    node->dir_entry_lba = lba;
+    node->dir_entry_offset = offset;
 
     link_node(parent, node);
 
@@ -308,31 +307,25 @@ vfs_node_t *vfs_create_file(
     vfs_node_t *parent,
     const char *name)
 {
-    return vfs_create(
-        parent,
-        name,
-        0);
+    return vfs_create(parent, name, 0);
 }
 
 vfs_node_t *vfs_create_dir(
     vfs_node_t *parent,
     const char *name)
 {
-    return vfs_create(
-        parent,
-        name,
-        1);
+    return vfs_create(parent, name, 1);
 }
 
 int vfs_count_children(vfs_node_t *dir)
 {
     int count = 0;
+    vfs_node_t *node;
 
     if(!dir)
         return 0;
 
-    vfs_node_t *node =
-        dir->child;
+    node = dir->child;
 
     while(node)
     {
@@ -363,7 +356,7 @@ vfs_node_t *vfs_find(
     vfs_node_t *dir,
     const char *name)
 {
-    if(!dir)
+    if(!dir || !name)
         return 0;
 
     vfs_node_t *node =
@@ -444,7 +437,12 @@ int vfs_rename(
     vfs_node_t *node,
     const char *name)
 {
-    if(!node || !name)
+    if(!node || !name || !name[0])
+        return 0;
+
+    if(node->parent &&
+       vfs_find(node->parent, name) &&
+       vfs_find(node->parent, name) != node)
         return 0;
 
     if(vfs_fs)
@@ -493,7 +491,6 @@ int vfs_delete(vfs_node_t *node)
     {
         vfs_node_t *cur =
             node->parent->child;
-
         vfs_node_t *prev = 0;
 
         while(cur && cur != node)
@@ -536,38 +533,6 @@ void vfs_init(fat32_fs_t *fs)
     if(fs && fs->mounted)
     {
         load_directory(root);
-
-        if(vfs_count_children(root) == 0)
-        {
-            vfs_node_t *home =
-                vfs_create_dir(root, "home");
-
-            vfs_node_t *readme =
-                vfs_create_file(
-                    home,
-                    "readme.txt");
-
-            vfs_node_t *config =
-                vfs_create_file(
-                    home,
-                    "config.sys");
-
-            if(readme)
-            {
-                readme->data[0] = 'H';
-                readme->data[1] = 'i';
-                readme->size = 2;
-                vfs_write(readme);
-            }
-
-            if(config)
-            {
-                config->size = 0;
-                config->data[0] = 0;
-                vfs_write(config);
-            }
-        }
-
         return;
     }
 
@@ -575,13 +540,9 @@ void vfs_init(fat32_fs_t *fs)
         vfs_create_dir(root, "home");
 
     vfs_node_t *readme =
-        vfs_create_file(
-            home,
-            "readme.txt");
+        vfs_create_file(home, "readme.txt");
 
-    vfs_create_file(
-        home,
-        "config.sys");
+    vfs_create_file(home, "config.sys");
 
     if(readme)
     {

@@ -34,9 +34,7 @@ static int is_eoc(unsigned int value)
     return value >= 0x0FFFFFF8;
 }
 
-static void make_83(
-    const char *name,
-    unsigned char out[11])
+static void make_83(const char *name, unsigned char out[11])
 {
     int i;
     int j;
@@ -85,26 +83,82 @@ static void make_83(
     }
 }
 
-static int name_matches(
-    const unsigned char *entry,
-    const char *name)
+static unsigned int fat_entry_lba(
+    const fat32_fs_t *fs,
+    unsigned int cluster)
 {
-    unsigned char wanted[11];
+    return fs->fat_lba +
+           (cluster * 4) / 512;
+}
 
-    make_83(name, wanted);
+static unsigned int fat_entry_offset(
+    unsigned int cluster)
+{
+    return (cluster * 4) % 512;
+}
 
-    for(int i = 0; i < 11; i++)
+static unsigned int read_fat_entry(
+    const fat32_fs_t *fs,
+    unsigned int cluster)
+{
+    unsigned int lba;
+    unsigned int offset;
+    unsigned char sector[512];
+
+    lba = fat_entry_lba(fs, cluster);
+    offset = fat_entry_offset(cluster);
+
+    if(!ata_read_sector(lba, sector))
+        return 0;
+
+    return rd32(&sector[offset]) &
+           0x0FFFFFFF;
+}
+
+static void zero_buffer(unsigned char *buffer)
+{
+    for(int i = 0; i < 512; i++)
+        buffer[i] = 0;
+}
+
+static int write_fat_entry(
+    const fat32_fs_t *fs,
+    unsigned int cluster,
+    unsigned int value)
+{
+    unsigned int lba;
+    unsigned int offset;
+    unsigned char sector[512];
+
+    value &= 0x0FFFFFFF;
+
+    lba = fat_entry_lba(fs, cluster);
+    offset = fat_entry_offset(cluster);
+
+    for(unsigned int fat = 0;
+        fat < fs->fats;
+        fat++)
     {
-        if(entry[i] != wanted[i])
+        unsigned int fat_lba =
+            lba + fat * fs->sectors_per_fat;
+
+        if(!ata_read_sector(
+                fat_lba,
+                sector))
+            return 0;
+
+        wr32(&sector[offset], value);
+
+        if(!ata_write_sector(
+                fat_lba,
+                sector))
             return 0;
     }
 
     return 1;
 }
 
-int fat32_mount(
-    fat32_fs_t *fs,
-    unsigned int partition_lba)
+int fat32_mount(fat32_fs_t *fs, unsigned int partition_lba)
 {
     unsigned char sector[512];
 
@@ -128,6 +182,11 @@ int fat32_mount(
     unsigned int bytes_per_sector = rd16(&sector[11]);
     unsigned int sectors_per_cluster = sector[13];
     unsigned int reserved = rd16(&sector[14]);
+    unsigned int total_sectors =
+        rd16(&sector[19]);
+
+    if(total_sectors == 0)
+        total_sectors = rd32(&sector[32]);
     unsigned int fats = sector[16];
     unsigned int sectors_per_fat = rd32(&sector[36]);
     unsigned int root_cluster = rd32(&sector[44]);
@@ -146,6 +205,7 @@ int fat32_mount(
     fs->sectors_per_fat = sectors_per_fat;
     fs->sectors_per_cluster = sectors_per_cluster;
     fs->root_cluster = root_cluster;
+    fs->total_sectors = total_sectors;
 
     fs->fat_lba =
         partition_lba + reserved;
@@ -162,9 +222,7 @@ unsigned int fat32_cluster_lba(
     const fat32_fs_t *fs,
     unsigned int cluster)
 {
-    if(!fs ||
-       !fs->mounted ||
-       cluster < 2)
+    if(!fs || !fs->mounted || cluster < 2)
         return 0;
 
     return fs->data_lba +
@@ -176,23 +234,10 @@ unsigned int fat32_next_cluster(
     const fat32_fs_t *fs,
     unsigned int cluster)
 {
-    unsigned char sector[512];
-
     if(!fs || !fs->mounted || cluster < 2)
         return 0;
 
-    unsigned int byte_offset = cluster * 4;
-    unsigned int lba =
-        fs->fat_lba +
-        byte_offset / 512;
-
-    unsigned int offset =
-        byte_offset % 512;
-
-    if(!ata_read_sector(lba, sector))
-        return 0;
-
-    return rd32(&sector[offset]) & 0x0FFFFFFF;
+    return read_fat_entry(fs, cluster);
 }
 
 int fat32_set_cluster(
@@ -200,47 +245,22 @@ int fat32_set_cluster(
     unsigned int cluster,
     unsigned int value)
 {
-    unsigned char sector[512];
-
     if(!fs || !fs->mounted || cluster < 2)
         return 0;
 
-    value &= 0x0FFFFFFF;
-
-    unsigned int byte_offset = cluster * 4;
-    unsigned int sector_index =
-        byte_offset / 512;
-    unsigned int offset =
-        byte_offset % 512;
-
-    for(unsigned int fat = 0; fat < fs->fats; fat++)
-    {
-        unsigned int lba =
-            fs->fat_lba +
-            fat * fs->sectors_per_fat +
-            sector_index;
-
-        if(!ata_read_sector(lba, sector))
-            return 0;
-
-        wr32(&sector[offset], value);
-
-        if(!ata_write_sector(lba, sector))
-            return 0;
-    }
-
-    return 1;
+    return write_fat_entry(fs, cluster, value);
 }
 
 unsigned int fat32_alloc_cluster(
     const fat32_fs_t *fs)
 {
+    unsigned int max_cluster;
+
     if(!fs || !fs->mounted)
         return 0;
 
-    unsigned int max_cluster =
-        fs->sectors_per_fat *
-        512 / 4;
+    max_cluster =
+        fs->sectors_per_fat * 512 / 4;
 
     for(unsigned int cluster = 3;
         cluster < max_cluster;
@@ -248,16 +268,15 @@ unsigned int fat32_alloc_cluster(
     {
         if(fat32_next_cluster(fs, cluster) == 0)
         {
+            unsigned char zero[512];
+
             if(!fat32_set_cluster(
                     fs,
                     cluster,
                     0x0FFFFFFF))
                 return 0;
 
-            unsigned char zero[512];
-
-            for(int i = 0; i < 512; i++)
-                zero[i] = 0;
+            zero_buffer(zero);
 
             for(unsigned int s = 0;
                 s < fs->sectors_per_cluster;
@@ -266,7 +285,10 @@ unsigned int fat32_alloc_cluster(
                 if(!ata_write_sector(
                         fat32_cluster_lba(fs, cluster) + s,
                         zero))
+                {
+                    fat32_set_cluster(fs, cluster, 0);
                     return 0;
+                }
             }
 
             return cluster;
@@ -407,16 +429,14 @@ int fat32_write_file(
         if(!first)
             first = cluster;
 
-        if(previous)
+        if(previous &&
+           !fat32_set_cluster(
+                fs,
+                previous,
+                cluster))
         {
-            if(!fat32_set_cluster(
-                    fs,
-                    previous,
-                    cluster))
-            {
-                fat32_free_chain(fs, first);
-                return 0;
-            }
+            fat32_free_chain(fs, first);
+            return 0;
         }
 
         unsigned int base =
@@ -428,8 +448,7 @@ int fat32_write_file(
         {
             unsigned char sector[512];
 
-            for(int i = 0; i < 512; i++)
-                sector[i] = 0;
+            zero_buffer(sector);
 
             unsigned int copy = remaining;
 
@@ -514,7 +533,10 @@ static int find_free_directory_slot(
             fs,
             cluster,
             new_cluster))
+    {
+        fat32_free_chain(fs, new_cluster);
         return 0;
+    }
 
     *entry_lba =
         fat32_cluster_lba(fs, new_cluster);
@@ -577,7 +599,59 @@ int fat32_create_entry(
         &sector[*entry_offset + 28],
         size);
 
-    return ata_write_sector(*entry_lba, sector);
+    if(!ata_write_sector(*entry_lba, sector))
+        return 0;
+
+    if(is_dir && first_cluster >= 2)
+    {
+        unsigned char dir_sector[512];
+
+        for(unsigned int s = 0;
+            s < fs->sectors_per_cluster;
+            s++)
+        {
+            if(!ata_read_sector(
+                    fat32_cluster_lba(fs, first_cluster) + s,
+                    dir_sector))
+                return 0;
+
+            if(s == 0)
+            {
+                for(int i = 0; i < 512; i++)
+                    dir_sector[i] = 0;
+
+                for(int i = 0; i < 11; i++)
+                    dir_sector[i] = ' ';
+
+                dir_sector[0] = '.';
+                dir_sector[11] = 0x10;
+
+                wr16(&dir_sector[20],
+                     (unsigned short)(first_cluster >> 16));
+                wr16(&dir_sector[26],
+                     (unsigned short)(first_cluster & 0xFFFF));
+
+                for(int i = 32; i < 43; i++)
+                    dir_sector[i] = ' ';
+
+                dir_sector[32] = '.';
+                dir_sector[33] = '.';
+                dir_sector[43] = 0x10;
+
+                wr16(&dir_sector[52],
+                     (unsigned short)(dir_cluster >> 16));
+                wr16(&dir_sector[58],
+                     (unsigned short)(dir_cluster & 0xFFFF));
+            }
+
+            if(!ata_write_sector(
+                    fat32_cluster_lba(fs, first_cluster) + s,
+                    dir_sector))
+                return 0;
+        }
+    }
+
+    return 1;
 }
 
 int fat32_update_entry(
@@ -635,7 +709,9 @@ int fat32_delete_entry(
 {
     unsigned char sector[512];
 
-    if(!fs || !fs->mounted)
+    if(!fs || !fs->mounted ||
+       entry_offset >= 512 ||
+       entry_offset % 32)
         return 0;
 
     if(!ata_read_sector(entry_lba, sector))
@@ -687,14 +763,12 @@ int fat32_directory_empty(
                 if(first == 0xE5)
                     continue;
 
-                unsigned char attr =
-                    sector[off + 11];
-
-                if(attr == 0x0F)
+                if(sector[off + 11] == 0x0F)
                     continue;
 
-                if(sector[off] == '.' ||
-                   sector[off] == '.')
+                if(first == '.' &&
+                   (sector[off + 1] == ' ' ||
+                    sector[off + 1] == '.'))
                     continue;
 
                 return 0;
@@ -709,6 +783,102 @@ int fat32_directory_empty(
 
         cluster = next;
     }
+
+    return 1;
+}
+
+
+int fat32_get_space(
+    const fat32_fs_t *fs,
+    unsigned int *total_bytes,
+    unsigned int *used_bytes,
+    unsigned int *free_bytes)
+{
+    unsigned int data_sectors;
+    unsigned int cluster_count;
+    unsigned int free_clusters = 0;
+
+    if(!fs || !fs->mounted ||
+       !total_bytes ||
+       !used_bytes ||
+       !free_bytes ||
+       fs->sectors_per_cluster == 0 ||
+       fs->total_sectors == 0)
+        return 0;
+
+    data_sectors =
+        fs->total_sectors -
+        fs->reserved_sectors -
+        fs->fats * fs->sectors_per_fat;
+
+    cluster_count =
+        data_sectors /
+        fs->sectors_per_cluster;
+
+    if(cluster_count == 0)
+        return 0;
+
+    unsigned int fat_entries_per_sector = 128;
+    unsigned int sectors_to_scan =
+        (cluster_count + fat_entries_per_sector - 1) /
+        fat_entries_per_sector;
+
+    unsigned char sector[512];
+
+    for(unsigned int s = 0;
+        s < sectors_to_scan;
+        s++)
+    {
+        if(!ata_read_sector(
+                fs->fat_lba + s,
+                sector))
+            return 0;
+
+        unsigned int entries = fat_entries_per_sector;
+
+        if(s == sectors_to_scan - 1)
+        {
+            unsigned int remaining =
+                cluster_count -
+                s * fat_entries_per_sector;
+
+            if(remaining < entries)
+                entries = remaining;
+        }
+
+        for(unsigned int i = 0;
+            i < entries;
+            i++)
+        {
+            unsigned int cluster =
+                s * fat_entries_per_sector + i + 2;
+
+            if(cluster < 2)
+                continue;
+
+            unsigned int value =
+                rd32(&sector[i * 4]) &
+                0x0FFFFFFF;
+
+            if(value == 0)
+                free_clusters++;
+        }
+    }
+
+    unsigned int bytes_per_cluster =
+        fs->sectors_per_cluster * 512;
+
+    *total_bytes =
+        cluster_count *
+        bytes_per_cluster;
+
+    *free_bytes =
+        free_clusters *
+        bytes_per_cluster;
+
+    *used_bytes =
+        *total_bytes -
+        *free_bytes;
 
     return 1;
 }

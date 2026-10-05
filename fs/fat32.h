@@ -12,6 +12,7 @@ typedef struct
     unsigned int sectors_per_fat;
     unsigned int sectors_per_cluster;
     unsigned int root_cluster;
+    unsigned int total_sectors;
 } fat32_fs_t;
 
 int fat32_mount(fat32_fs_t *fs, unsigned int partition_lba);
@@ -77,5 +78,11 @@ int fat32_delete_entry(
 int fat32_directory_empty(
     const fat32_fs_t *fs,
     unsigned int dir_cluster);
+
+int fat32_get_space(
+    const fat32_fs_t *fs,
+    unsigned int *total_bytes,
+    unsigned int *used_bytes,
+    unsigned int *free_bytes);
 
 #endif
