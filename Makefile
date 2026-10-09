@@ -16,6 +16,7 @@ C_SRC = \
 	drivers/ata.c \
 	drivers/pic.c \
 	drivers/pit.c \
+	drivers/speaker.c \
 	interrupts/idt.c \
 	gdt/gdt.c \
 	time/rtc.c \
@@ -25,7 +26,9 @@ C_SRC = \
 	ui/editor.c \
 	ui/terminal.c \
 	ui/filemanager.c \
-	ui/pong.c
+	ui/pong.c \
+	runtime/tex.c \
+	compiler/turbix.c
 
 C_OBJ = $(C_SRC:.c=.o)
 

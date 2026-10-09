@@ -383,19 +383,25 @@ vfs_node_t *vfs_find(
 
 int vfs_read(vfs_node_t *node)
 {
+    unsigned int file_size;
+    unsigned int size = 0;
+
     if(!node || node->is_dir)
         return 0;
 
     if(!vfs_fs)
         return 1;
 
-    unsigned int size = 0;
+    file_size = node->size;
+
+    if(file_size >= VFS_NODE_DATA)
+        file_size = VFS_NODE_DATA - 1;
 
     if(!fat32_read_file(
             vfs_fs,
             node->first_cluster,
             (unsigned char *)node->data,
-            VFS_NODE_DATA - 1,
+            file_size,
             &size))
         return 0;
 

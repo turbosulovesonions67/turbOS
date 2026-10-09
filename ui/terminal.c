@@ -7,6 +7,8 @@
 #include "ui/filemanager.h"
 #include "ui/editor.h"
 #include "fs/vfs.h"
+#include "runtime/tex.h"
+#include "compiler/turbix.h"
 
 static int strcmp_local(const char *a, const char *b)
 {
@@ -515,6 +517,76 @@ static void terminal_add_command(void)
     terminal_push_line(line);
 }
 
+static void make_tex_name(
+    const char *source_name,
+    char *output_name)
+{
+    int i = 0;
+    int dot = -1;
+
+    while(source_name[i] && i < 30)
+    {
+        if(source_name[i] == '.')
+            dot = i;
+
+        output_name[i] = source_name[i];
+        i++;
+    }
+
+    if(dot >= 0)
+    {
+        output_name[dot++] = '.';
+        output_name[dot++] = 't';
+        output_name[dot++] = 'e';
+        output_name[dot++] = 'x';
+        output_name[dot] = 0;
+    }
+    else
+    {
+        output_name[i++] = '.';
+        output_name[i++] = 't';
+        output_name[i++] = 'e';
+        output_name[i++] = 'x';
+        output_name[i] = 0;
+    }
+}
+
+static int parse_compile_argument(
+    const char *arg,
+    char *filename)
+{
+    int i = 0;
+
+    while(arg[i] == ' ')
+        i++;
+
+    if(arg[i++] != '-')
+        return 0;
+
+    if(arg[i++] != 'c')
+        return 0;
+
+    if(arg[i] != ' ')
+        return 0;
+
+    while(arg[i] == ' ')
+        i++;
+
+    if(!arg[i])
+        return 0;
+
+    {
+        int j = 0;
+
+        while(arg[i] && j < 79)
+            filename[j++] = arg[i++];
+
+        filename[j] = 0;
+    }
+
+    return 1;
+}
+
 static void execute_command(void)
 {
     char command[80];
@@ -568,6 +640,8 @@ static void execute_command(void)
         terminal_print("rmdir <d>  delete empty directory");
         terminal_print("fm         open file manager");
         terminal_print("open <f>   open file in editor");
+        terminal_print("run <f>    execute TEX program");
+        terminal_print("turbix -c <f> compile Turbix");
         terminal_print("clear      clear terminal");
         terminal_print("time       show home clock");
         terminal_print("about      show system information");
@@ -725,6 +799,88 @@ static void execute_command(void)
         {
             editor_open_file(file);
             return;
+        }
+    }
+    else if(!strcmp_local(command, "run"))
+    {
+        vfs_node_t *file =
+            resolve_path(
+                fm_dir,
+                arg);
+
+        if(!file || file->is_dir)
+        {
+            terminal_print(
+                "run: file not found");
+        }
+        else if(!tex_execute(file))
+        {
+            terminal_print(
+                "run: execution failed");
+        }
+    }
+    else if(!strcmp_local(command, "turbix"))
+    {
+        char source_name[80];
+        char output_name[32];
+        vfs_node_t *source;
+        vfs_node_t *output;
+
+        if(!parse_compile_argument(arg, source_name))
+        {
+            terminal_print(
+                "usage: turbix -c <file.tix>");
+        }
+        else
+        {
+            source =
+                resolve_path(
+                    fm_dir,
+                    source_name);
+
+            if(!source || source->is_dir)
+            {
+                terminal_print(
+                    "turbix: source file not found");
+            }
+            else
+            {
+                make_tex_name(
+                    source->name,
+                    output_name);
+
+                output =
+                    vfs_find(
+                        source->parent,
+                        output_name);
+
+                if(output)
+                    vfs_delete(output);
+
+                output =
+                    vfs_create_file(
+                        source->parent,
+                        output_name);
+
+                if(!output)
+                {
+                    terminal_print(
+                        "turbix: cannot create output");
+                }
+                else if(!turbix_compile(
+                            source,
+                            output))
+                {
+                    vfs_delete(output);
+                    terminal_print(
+                        "turbix: compilation failed");
+                }
+                else
+                {
+                    terminal_print(
+                        "compiled successfully");
+                }
+            }
         }
     }
     else if(!strcmp_local(command, "ver"))

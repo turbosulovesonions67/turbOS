@@ -302,10 +302,16 @@ int fat32_free_chain(
     const fat32_fs_t *fs,
     unsigned int cluster)
 {
+    unsigned int count = 0;
+    unsigned int max_clusters;
+
     if(!fs || !fs->mounted)
         return 0;
 
-    while(cluster >= 2)
+    max_clusters =
+        (fs->sectors_per_fat * 512) / 4;
+
+    while(cluster >= 2 && count < max_clusters)
     {
         unsigned int next =
             fat32_next_cluster(fs, cluster);
@@ -314,12 +320,16 @@ int fat32_free_chain(
             return 0;
 
         if(is_eoc(next) || next == 0)
-            break;
+            return 1;
+
+        if(next >= max_clusters)
+            return 0;
 
         cluster = next;
+        count++;
     }
 
-    return 1;
+    return 0;
 }
 
 int fat32_read_file(

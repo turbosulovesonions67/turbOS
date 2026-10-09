@@ -92,22 +92,49 @@ static void editor_refresh_cursor(void)
 
 void editor_save(void)
 {
-    int k;
     int r;
     int c;
+    int k = 0;
+    int last = -1;
 
     if(!editor_file)
         return;
 
-    k = 0;
-
     for(r = 0; r < MAX_LINES; r++)
     {
-        for(c = 0; c < MAX_COLS; c++)
+        int end = MAX_COLS;
+
+        while(end > 0 &&
+              editor_lines[r][end - 1] == ' ')
+            end--;
+
+        if(end > 0)
+            last = r;
+    }
+
+    for(r = 0; r <= last; r++)
+    {
+        int end = MAX_COLS;
+
+        while(end > 0 &&
+              editor_lines[r][end - 1] == ' ')
+            end--;
+
+        for(c = 0; c < end; c++)
         {
-            if(k < VFS_NODE_DATA - 1)
-                editor_file->data[k++] = editor_lines[r][c];
+            if(k >= VFS_NODE_DATA - 1)
+                break;
+
+            editor_file->data[k++] =
+                editor_lines[r][c];
         }
+
+        if(r < last &&
+           k < VFS_NODE_DATA - 1)
+            editor_file->data[k++] = '\n';
+
+        if(k >= VFS_NODE_DATA - 1)
+            break;
     }
 
     editor_file->data[k] = 0;
@@ -119,9 +146,10 @@ void editor_save(void)
         terminal_print("Save failed.");
 }
 
+
 void editor_open_file(vfs_node_t *file)
 {
-    int i;
+    unsigned int i;
     int r;
     int c;
 
@@ -140,22 +168,23 @@ void editor_open_file(vfs_node_t *file)
     r = 0;
     c = 0;
 
-    while(i < VFS_NODE_DATA - 1 &&
-          i < MAX_LINES * MAX_COLS &&
-          file->data[i])
+    while(i < file->size &&
+          i < VFS_NODE_DATA - 1 &&
+          r < MAX_LINES)
     {
-        editor_lines[r][c] = file->data[i++];
-
-        c++;
-
-        if(c >= MAX_COLS)
+        if(file->data[i] == '\n')
         {
-            c = 0;
             r++;
-
-            if(r >= MAX_LINES)
-                break;
+            c = 0;
         }
+        else if(file->data[i] != '\r')
+        {
+            if(c < MAX_COLS)
+                editor_lines[r][c++] =
+                    file->data[i];
+        }
+
+        i++;
     }
 
     current_screen = SCREEN_EDITOR;
@@ -299,24 +328,20 @@ void handle_editor_key(int key)
     {
         if(editor_row < MAX_LINES - 1)
         {
-            for(int r = MAX_LINES - 1;
-                r > editor_row;
-                r--)
+            for(int r = MAX_LINES - 1; r > editor_row + 1; r--)
             {
                 for(int c = 0; c < MAX_COLS; c++)
-                    editor_lines[r][c] =
-                        editor_lines[r - 1][c];
+                    editor_lines[r][c] = editor_lines[r - 1][c];
             }
 
-            for(int c = editor_col;
-                c < MAX_COLS;
-                c++)
+            for(int c = 0; c < MAX_COLS; c++)
+                editor_lines[editor_row + 1][c] = ' ';
+
+            for(int c = editor_col; c < MAX_COLS; c++)
                 editor_lines[editor_row + 1][c - editor_col] =
                     editor_lines[editor_row][c];
 
-            for(int c = editor_col;
-                c < MAX_COLS;
-                c++)
+            for(int c = editor_col; c < MAX_COLS; c++)
                 editor_lines[editor_row][c] = ' ';
 
             editor_row++;
