@@ -76,7 +76,7 @@ Install any missing packages through Fedora's package manager before building.
 Clone the repository and enter the project directory:
 
     git clone https://github.com/turbosulovesonions67/turbOS
-    cd turbOS-prac
+    cd turbOS
 
 Build the project and launch it in QEMU:
 
