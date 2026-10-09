@@ -153,3 +153,7 @@ Compiler and runtime changes should be tested together to ensure that generated 
 ## License
 
 See the `LICENSE` file in the repository for the applicable license terms.
+
+## Credits
+
+Turbosu Pramanik (c) 2026 all rights reserved. Long Live ##NOAI
