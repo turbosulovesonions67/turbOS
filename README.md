@@ -1,3 +1,5 @@
+## DO NOT LISTEN TO RELEASES >:(
+
 # turbOS
 
 turbOS is an experimental operating system for the 32-bit x86 architecture. The project is developed in C and assembly, with a focus on kernel development, hardware interfaces, persistent storage, and a small user-facing environment.
