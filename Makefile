@@ -79,6 +79,8 @@ run: all
 		-boot order=d \
 		-cdrom turbOS.iso \
 		-drive file=turbOS-disk.img,format=raw,if=ide \
+		-netdev user,id=net0 \
+		-device rtl8139,netdev=net0 \
 		-m 512M
 
 clean:

@@ -813,6 +813,11 @@ static void execute_command(void)
             terminal_print(
                 "run: file not found");
         }
+        else if(!vfs_read(file))
+        {
+            terminal_print(
+                "run: could not read file");
+        }
         else if(!tex_execute(file))
         {
             terminal_print(
