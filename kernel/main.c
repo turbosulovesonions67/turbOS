@@ -1,4 +1,5 @@
 #include "kernel/state.h"
+#include "kernel/accounts.h"
 
 #include "gdt/gdt.h"
 #include "interrupts/idt.h"
@@ -187,8 +188,101 @@ static void process_global_key(int key)
     }
 }
 
-void kernel_main(void)
+
+#define MULTIBOOT2_BOOT_MAGIC 0x36d76289U
+
+unsigned int memory_total_mib = 0;
+int memory_map_available = 0;
+
+static unsigned int multiboot2_memory_total(unsigned int info_addr)
 {
+    unsigned int total_size;
+    unsigned int offset;
+    unsigned int total_mib = 0;
+
+    if(!info_addr)
+        return 0;
+
+    total_size = *(volatile unsigned int *)info_addr;
+    if(total_size < 16)
+        return 0;
+
+    offset = 8;
+    while(offset + 8 <= total_size)
+    {
+        unsigned int *tag =
+            (unsigned int *)(info_addr + offset);
+        unsigned int type = tag[0];
+        unsigned int size = tag[1];
+
+        if(size < 8 || size > total_size - offset)
+            return 0;
+
+        if(type == 0)
+            break;
+
+        if(type == 6 && size >= 16)
+        {
+            unsigned int entry_size = tag[2];
+            unsigned int pos = offset + 16;
+
+            if(entry_size < 24)
+                return 0;
+
+            while(pos + entry_size <= offset + size)
+            {
+                unsigned int *entry =
+                    (unsigned int *)(info_addr + pos);
+                unsigned int length_low = entry[2];
+                unsigned int length_high = entry[3];
+                unsigned int region_mib;
+                
+                /* Each memory-map entry is:
+                   base(64), length(64), type(32), reserved(32). */
+                if(entry[4] == 1)
+                {
+                    if(length_high > 0x000FFFFFU)
+                        return 0;
+
+                    region_mib =
+                        (length_high << 12) |
+                        (length_low >> 20);
+
+                    if(region_mib > 0xFFFFFFFFU - total_mib)
+                        total_mib = 0xFFFFFFFFU;
+                    else
+                        total_mib += region_mib;
+                }
+                pos += entry_size;
+            }
+
+            return total_mib;
+        }
+
+        offset = (offset + size + 7U) & ~7U;
+    }
+
+    return 0;
+}
+
+static void multiboot_memory_init(unsigned int magic,
+                                  unsigned int info_addr)
+{
+    memory_total_mib = 0;
+    memory_map_available = 0;
+
+    if(magic != MULTIBOOT2_BOOT_MAGIC)
+        return;
+
+    memory_total_mib = multiboot2_memory_total(info_addr);
+    if(memory_total_mib)
+        memory_map_available = 1;
+}
+
+void kernel_main(unsigned int multiboot_magic,
+                  unsigned int multiboot_info_addr)
+{
+    multiboot_memory_init(multiboot_magic, multiboot_info_addr);
     unsigned char second;
     int filesystem_ok;
 
@@ -274,6 +368,9 @@ void kernel_main(void)
 
     boot_wait(25);
 
+    if(!accounts_init() || !accounts_boot_login())
+        kernel_panic_disk();
+
     draw_home();
 
     second =
@@ -288,6 +385,13 @@ void kernel_main(void)
 
         while((key = keyboard_getkey()) != KEY_NONE)
         {
+            if(key == KEY_CTRL_ALT_S)
+            {
+                accounts_system_console();
+                draw_home();
+                continue;
+            }
+
             if(key == KEY_CTRL)
             {
                 ctrl_pressed = 1;
