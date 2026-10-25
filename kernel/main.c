@@ -10,6 +10,7 @@
 #include "drivers/pic.h"
 #include "drivers/pit.h"
 #include "drivers/vga.h"
+#include "drivers/framebuffer.h"
 
 #include "fs/vfs.h"
 #include "fs/fat32.h"
@@ -283,6 +284,7 @@ void kernel_main(unsigned int multiboot_magic,
                   unsigned int multiboot_info_addr)
 {
     multiboot_memory_init(multiboot_magic, multiboot_info_addr);
+    framebuffer_boot_message(multiboot_magic, multiboot_info_addr);
     unsigned char second;
     int filesystem_ok;
 

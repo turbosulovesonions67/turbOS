@@ -11,6 +11,7 @@ C_SRC = \
 	fs/vfs.c \
 	fs/fat32.c \
 	drivers/vga.c \
+	drivers/framebuffer.c \
 	drivers/keyboard.c \
 	drivers/mouse.c \
 	drivers/ps2.c \
