@@ -3,7 +3,7 @@
 
 #include "fat32.h"
 
-#define VFS_MAX_NODES 64
+#define VFS_MAX_NODES 128
 #define VFS_NODE_DATA 1024
 
 typedef struct vfs_node
@@ -25,6 +25,8 @@ typedef struct vfs_node
 } vfs_node_t;
 
 void vfs_init(fat32_fs_t *fs);
+int vfs_get_storage_info(unsigned int *partition_lba,
+                         unsigned int *total_sectors);
 
 vfs_node_t *vfs_create(
     vfs_node_t *parent,

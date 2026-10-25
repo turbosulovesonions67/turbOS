@@ -7,6 +7,7 @@ LDFLAGS = -T linker.ld -m32 -nostdlib -lgcc
 C_SRC = \
 	kernel/main.c \
 	kernel/state.c \
+	kernel/accounts.c \
 	fs/vfs.c \
 	fs/fat32.c \
 	drivers/vga.c \

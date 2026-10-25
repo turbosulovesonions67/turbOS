@@ -22,6 +22,7 @@
 #define KEY_F8 269
 #define KEY_F9 270
 #define KEY_F10 271
+#define KEY_CTRL_ALT_S 272
 
 void keyboard_init(void);
 void keyboard_irq(void);

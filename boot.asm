@@ -19,6 +19,8 @@ _start:
     cli
     mov esp, stack_top
     and esp, 0xfffffff0
+    push ebx
+    push eax
     call kernel_main
 
 .hang:

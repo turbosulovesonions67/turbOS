@@ -8,6 +8,7 @@ static volatile unsigned int tail = 0;
 
 static int shift = 0;
 static int ctrl = 0;
+static int alt = 0;
 
 static const char normal[128] = {
     0,27,'1','2','3','4','5','6','7','8','9','0','-','=',
@@ -46,70 +47,40 @@ void keyboard_init(void)
     tail = 0;
     shift = 0;
     ctrl = 0;
+
+    alt = 0;
 }
 
 void keyboard_irq(void)
 {
     unsigned char sc;
+    asm volatile("inb %1,%0" : "=a"(sc) : "Nd"((unsigned short)0x60));
 
-    __asm__ volatile("inb %1,%0" : "=a"(sc) : "Nd"((unsigned short)0x60));
-
-    if(sc & 0x80)
-    {
+    if(sc & 0x80) {
         unsigned char released = sc & 0x7F;
-
-        if(released == 0x2A || released == 0x36)
-            shift = 0;
-
-        if(released == 0x1D)
-            ctrl = 0;
-
+        if(released == 0x2A || released == 0x36) shift = 0;
+        if(released == 0x1D) ctrl = 0;
+        if(released == 0x38) alt = 0;
         return;
     }
 
-    if(sc == 0x2A || sc == 0x36)
-    {
-        shift = 1;
+    if(sc == 0x2A || sc == 0x36) { shift = 1; return; }
+    if(sc == 0x1D) { ctrl = 1; push_key(KEY_CTRL); return; }
+    if(sc == 0x38) { alt = 1; return; }
+
+    if(sc == 0x1F && ctrl && alt) {
+        push_key(KEY_CTRL_ALT_S);
         return;
     }
 
-    if(sc == 0x1D)
-    {
-        ctrl = 1;
-        push_key(KEY_CTRL);
-        return;
-    }
+    if(sc == 0x48) { push_key(KEY_UP); return; }
+    if(sc == 0x50) { push_key(KEY_DOWN); return; }
+    if(sc == 0x4B) { push_key(KEY_LEFT); return; }
+    if(sc == 0x4D) { push_key(KEY_RIGHT); return; }
 
-    if(sc == 0x48)
-    {
-        push_key(KEY_UP);
-        return;
-    }
-
-    if(sc == 0x50)
-    {
-        push_key(KEY_DOWN);
-        return;
-    }
-
-    if(sc == 0x4B)
-    {
-        push_key(KEY_LEFT);
-        return;
-    }
-
-    if(sc == 0x4D)
-    {
-        push_key(KEY_RIGHT);
-        return;
-    }
-
-    if(sc < 128)
-    {
+    if(sc < 128) {
         int key = shift ? shifted[sc] : normal[sc];
-
-        if(key)
-            push_key(key);
+        if(key) push_key(key);
     }
 }
 

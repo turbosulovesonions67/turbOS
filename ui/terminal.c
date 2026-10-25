@@ -1,5 +1,7 @@
 #include "ui/terminal.h"
 #include "kernel/state.h"
+#include "kernel/memory.h"
+#include "kernel/accounts.h"
 #include "drivers/vga.h"
 #include "drivers/keyboard.h"
 #include "power/power.h"
@@ -9,6 +11,27 @@
 #include "fs/vfs.h"
 #include "runtime/tex.h"
 #include "compiler/turbix.h"
+
+static void terminal_print_uint(unsigned int value)
+{
+    char digits[11];
+    unsigned int count = 0;
+
+    do
+    {
+        digits[count++] = (char)('0' + value % 10);
+        value /= 10;
+    } while(value && count < sizeof(digits));
+
+    while(count)
+    {
+        char output[2];
+        output[0] = digits[--count];
+        output[1] = '\0';
+        terminal_print(output);
+    }
+}
+
 
 static int strcmp_local(const char *a, const char *b)
 {
@@ -650,8 +673,51 @@ static void execute_command(void)
         terminal_print("reboot     reboot");
         terminal_print("powoff     power off");
         terminal_print("exit       return home");
+        terminal_print("logout     log out and select account");
+    terminal_print("lsblk      show mounted storage volume");
+    terminal_print("free -h    show memory status");
     }
-    else if(!strcmp_local(command, "ls"))
+    else if(!strcmp_local(command, "lsblk"))
+{
+    unsigned int partition_lba;
+    unsigned int total_sectors;
+    unsigned int size_mib;
+
+    terminal_print("NAME     TYPE   SIZE");
+    if(vfs_get_storage_info(&partition_lba, &total_sectors))
+    {
+        terminal_print("fat32    volume ");
+        size_mib = total_sectors / 2048U;
+        terminal_print_uint(size_mib);
+        terminal_print(" MiB");
+        terminal_print("Start LBA: ");
+        terminal_print_uint(partition_lba);
+    }
+    else
+    {
+        terminal_print("No mounted storage volume");
+    }
+}
+else if(!strcmp_local(command, "free"))
+{
+    if(arg[0] != '\0' && strcmp_local(arg, "-h"))
+    {
+        terminal_print("Usage: free -h");
+    }
+    else if(!memory_map_available)
+    {
+        terminal_print("Memory map unavailable.");
+        terminal_print("Check Multiboot2 bootloader support.");
+    }
+    else
+    {
+        terminal_print("Usable RAM total: ");
+        terminal_print_uint(memory_total_mib);
+        terminal_print(" MiB");
+        terminal_print("Used/free breakdown is not implemented yet.");
+    }
+}
+else if(!strcmp_local(command, "ls"))
     {
         command_ls();
     }
@@ -921,6 +987,29 @@ static void execute_command(void)
         terminal_print("Kernel : TASK-32bit");
         terminal_print("Arch   : i386");
         terminal_print("Shell  : turbCMD!");
+    }
+    else if(!strcmp_local(command, "logout"))
+    {
+        terminal_print("Logging out...");
+        terminal_input[0] = 0;
+        terminal_pos = 0;
+        current_screen = SCREEN_HOME;
+
+        if(accounts_boot_login())
+        {
+            current_screen = SCREEN_HOME;
+            fm_dir = vfs_get_root();
+            fm_index = 0;
+            fm_scroll = 0;
+            draw_home();
+        }
+        else
+        {
+            terminal_print("logout: login failed");
+            current_screen = SCREEN_HOME;
+            draw_home();
+        }
+        return;
     }
     else if(!strcmp_local(command, "exit"))
     {

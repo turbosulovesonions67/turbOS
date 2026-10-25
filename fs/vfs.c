@@ -558,3 +558,15 @@ void vfs_init(fat32_fs_t *fs)
         readme->size = 2;
     }
 }
+
+
+int vfs_get_storage_info(unsigned int *partition_lba,
+                         unsigned int *total_sectors)
+{
+    if(!vfs_fs || !vfs_fs->mounted || !partition_lba || !total_sectors)
+        return 0;
+
+    *partition_lba = vfs_fs->partition_lba;
+    *total_sectors = vfs_fs->total_sectors;
+    return 1;
+}
