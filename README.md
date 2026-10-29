@@ -235,3 +235,7 @@ See [`LICENSE`](LICENSE) for the applicable license terms.
 An independent hobby OS built through experimentation, debugging, and a refusal to leave low-level computing alone.
 
 **Long live turbOS. Long live `##NOAI`.**
+<<<<<<< HEAD
+=======
+
+>>>>>>> 83c2dfb (gui/desktop.c checking (LLM assisted of) completed so a few tweaks with LLM and cleanup and then pushed1)

@@ -34,7 +34,7 @@
 #define FLY_H         (FLY_ITEM_H * 2 + 8)
 #define ICON_CELL_W   76
 #define ICON_CELL_H   84
-#define DOUBLE_CLICK_TICKS 50        
+#define DOUBLE_CLICK_TICKS 50
 #define BLINK_TICKS        50
 #define C_DESKTOP     GFX_RGB(0, 99, 177)
 #define C_ACCENT      GFX_RGB(0, 120, 215)
@@ -68,31 +68,31 @@ enum
     ID_SHOW       = 5,
     ID_MENU_BLANK = 6,
     ID_POWER      = 7,
-    ID_FLY        = 10,      
-    ID_MENU       = 20,      
-    ID_ICON       = 30,      
-    ID_TBBTN      = 40,      
-    ID_TITLE      = 50,      
-    ID_CLIENT     = 60,      
-    ID_CAPTION    = 100      
+    ID_FLY        = 10,
+    ID_MENU       = 20,
+    ID_ICON       = 30,
+    ID_TBBTN      = 40,
+    ID_TITLE      = 50,
+    ID_CLIENT     = 60,
+    ID_CAPTION    = 100
 };
 typedef struct
 {
     int open;
     int minimized;
     int maximized;
-    int x;                   
+    int x;
     int y;
-    int rx;                  
+    int rx;
     int ry;
 } window_t;
 static window_t win[APP_COUNT];
-static int zorder[APP_COUNT];            
+static int zorder[APP_COUNT];
 static int scr_w;
 static int scr_h;
-static int work_h;                       
-static int focus = -1;                   
-static int screen_seen;                  
+static int work_h;
+static int focus = -1;
+static int screen_seen;
 static int start_open;
 static int power_open;
 static int selected_icon = -1;
@@ -118,8 +118,8 @@ static int clock_valid;
 static unsigned int last_clock_poll;
 static unsigned char last_min;
 static unsigned char last_sec;
-static char time_text[6];                
-static char date_text[11];               
+static char time_text[6];
+static char date_text[11];
 static int desktop_ready;
 static int imin(int a, int b)
 {
