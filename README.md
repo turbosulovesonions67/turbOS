@@ -2,160 +2,236 @@
 
 # turbOS
 
-turbOS is an experimental operating system for the 32-bit x86 architecture. The project is developed in C and assembly, with a focus on kernel development, hardware interfaces, persistent storage, and a small user-facing environment.
+**An experimental 32-bit x86 operating system written in C and assembly.**
 
-The system boots through GRUB and runs in QEMU during development. Its current implementation includes a text-mode interface, a virtual filesystem backed by FAT32, basic hardware drivers, and an experimental compiled language runtime.
+turbOS is a hobby operating system built from scratch to explore kernel development, hardware interfaces, persistent storage, graphics, and system-level programming. It boots through GRUB using the Multiboot2 protocol and is developed and tested primarily in QEMU.
+
+The project includes a freestanding kernel, hardware drivers, a FAT32-backed Virtual Filesystem (VFS), built-in applications, graphical interface components, and an experimental programming language toolchain.
+
+Still a work in progress. Still being built. Still refusing to listen to releases.
 
 ## Features
 
 ### Kernel and Hardware
 
 - 32-bit x86 kernel
-- GRUB-based boot process
+- GRUB bootloader with Multiboot2 support
+- Assembly boot entry point and custom linker script
 - Global Descriptor Table (GDT)
-- Interrupt Descriptor Table (IDT) and interrupt handlers
+- Interrupt Descriptor Table (IDT) and interrupt service routines
 - Programmable Interrupt Controller (PIC)
 - Programmable Interval Timer (PIT)
 - Real-time clock (RTC)
-- VGA text-mode display
-- PS/2 keyboard and mouse input
-- PC speaker support
+- VGA text-mode output
+- Keyboard and PS/2 mouse support
 - ATA PIO disk access
+- PC speaker support
+- Framebuffer driver and graphics-related components
+- Basic power-management routines
 
 ### Storage and Filesystems
 
-- ATA sector read and write operations
-- FAT32 filesystem support
-- Virtual filesystem (VFS)
-- Directory and file operations
-- Persistent file storage through a virtual disk
-- File manager and text editor
+turbOS implements its own storage and filesystem components, with ATA disk access underneath a FAT32 filesystem and Virtual Filesystem (VFS) layer.
 
-The filesystem implementation is intended for the project's current environment and is not a complete replacement for a production filesystem stack. File sizes, directory entry formats, supported filenames, and other filesystem operations are subject to implementation limits.
+- ATA sector reads and writes
+- FAT32 filesystem implementation
+- Virtual Filesystem abstraction
+- File and directory management
+- Virtual disk image for persistent-storage experiments
+- Filesystem integration with the terminal, editor, and file manager
+
+The filesystem is still experimental. Supported operations, filename handling, storage limits, and compatibility depend on the current implementation.
 
 ### User Interface
 
-The system includes a terminal interface and several built-in applications:
+The project includes several built-in interfaces and applications:
 
-- File manager
-- Text editor
-- Pong
-- Screen saver
+- **Home** — main system interface
+- **Terminal** — command-line environment
+- **File manager** — browse and manage files
+- **Text editor** — edit and save text files
+- **Pong** — built-in game
+- **Screen saver** — screen-saver component
+- **GUI** — desktop, graphics routines, icons, and font resources
 
-The terminal provides access to filesystem operations and the experimental Turbix compiler and TEX runtime.
+The project contains both VGA text-mode and framebuffer/graphics-related code. These components are still evolving, and not every interface necessarily uses the same rendering path.
+
+### Accounts
+
+The kernel includes an account-management component in `kernel/accounts.c` and `kernel/accounts.h`, intended to support the system's account-related functionality.
 
 ### Turbix and TEX
 
-Turbix is an experimental compiler for the `.tix` source format. It produces `.tex` bytecode, which is executed by the TEX runtime inside turbOS.
+**Turbix** is an experimental compiler for the `.tix` source format. It produces `.tex` bytecode, which is handled by the TEX runtime.
 
-A minimal source program looks like this:
+A minimal example using the documented syntax:
 
-    program start
-    main():
-        text("Hello from turbOS")
-        loop end
-    program end
+```text
+program start
+main():
+    text("Hello from turbOS")
+    loop end
+program end
+```
 
-The current instruction set includes text output, speaker beeps, and program termination.
+The compiler and runtime are located in `compiler/` and `runtime/`.
 
-The compiler and runtime are works in progress. Language syntax, bytecode instructions, and runtime capabilities may change as development continues.
+Turbix and TEX are works in progress. Their syntax, instruction set, bytecode format, and supported operations may change as development continues.
 
 ## Requirements
 
-The development environment requires a compatible build toolchain and the utilities used by the Makefile. On Fedora, the principal tools include:
+The project uses a freestanding 32-bit GCC build, NASM for assembly, GRUB utilities for ISO generation, and QEMU for emulation.
 
-- GCC or the compiler configured by the project
-- GNU Make
-- NASM
-- GRUB utilities, including `grub2-mkrescue`
-- xorriso
-- QEMU with x86 system emulation
+On Fedora, install the principal tools with:
 
-Install any missing packages through Fedora's package manager before building.
+```bash
+sudo dnf install gcc make nasm grub2-tools \
+    grub2-tools-extra xorriso qemu-system-x86 dosfstools
+```
+
+Additional toolchain components may be needed depending on your Fedora installation.
 
 ## Build and Run
 
-Clone the repository and enter the project directory:
+Clone the repository:
 
-    git clone https://github.com/turbosulovesonions67/turbOS
-    cd turbOS
+```bash
+git clone https://github.com/turbosulovesonions67/turbOS.git
+cd turbOS
+```
 
-Build the project and launch it in QEMU:
+Build the kernel, ISO, and virtual disk image:
 
-    make run
+```bash
+make
+```
 
-The build process generates the kernel image and bootable ISO, then starts the virtual machine. The Makefile also configures the virtual disk used for filesystem testing.
+Build and launch turbOS in QEMU:
 
-If the build environment is already configured, subsequent development runs can use the same command.
+```bash
+make run
+```
+
+The current Makefile configures QEMU with:
+
+- `qemu-system-i386`
+- 512 MiB of emulated RAM
+- A bootable ISO image
+- An IDE-attached raw disk image
+- User-mode networking and an emulated RTL8139 network adapter
+
+The network adapter is part of the virtual machine configuration; its presence does not imply that a network stack is implemented in turbOS.
+
+### Build Configuration
+
+The kernel is compiled using GCC with the following principal flags:
+
+```text
+-ffreestanding -m32 -g -O0 -Wall -Wextra -I.
+```
+
+The linker uses `linker.ld`, with `-nostdlib` and `-lgcc`. Assembly files are assembled in ELF32 format using NASM.
+
+The boot configuration loads `kernel.bin` through GRUB's Multiboot2 interface. The boot header also requests a 1024 × 768 × 32 framebuffer mode.
+
+### Generated Files
+
+| File | Purpose |
+|---|---|
+| `kernel.bin` | Linked kernel binary |
+| `turbOS.iso` | Bootable ISO |
+| `turbOS-disk.img` | Virtual FAT32 disk |
+| `isodir/` | Temporary ISO staging directory |
+| `*.o` | Compiled object files |
+
+The disk-image target creates a 64 MiB FAT32 image labelled `TURBOS` only if the image does not already exist. Existing disk images are reused between runs.
+
+### Cleaning Build Artifacts
+
+```bash
+make clean
+```
+
+This removes compiled object files, `kernel.bin`, `turbOS.iso`, and the `isodir/` directory. It preserves the virtual disk image.
 
 ## Working With Files
 
-The terminal and file manager provide access to files stored in the virtual disk. Changes saved through the filesystem are intended to persist between emulator sessions, provided the same disk image is reused.
+The filesystem components are designed to provide file and directory access through the VFS and FAT32 layers. The terminal, file manager, and text editor provide interfaces for working with files.
 
-The editor supports basic text editing and saving. The current implementation has fixed limits on the number of lines, line width, and in-memory file data.
+Because the filesystem is still under development, avoid treating it as a fully compatible or production-ready storage implementation. Back up any virtual disk data you care about before experimenting with filesystem changes.
 
 ## Compiling a TEX Program
 
-Create a source file with the `.tix` extension using the editor. For example, save the program shown above as `pg.tix`.
+Create a source file with the `.tix` extension using the editor. For example, save your program as `pg.tix`.
 
 Compile it from the turbOS terminal:
 
-    turbix -c pg.tix
+```text
+turbix -c pg.tix
+```
 
 Execute the generated bytecode:
 
-    run pg.tex
+```text
+run pg.tex
+```
 
-The compiler writes a TEX file, and the runtime validates its header before interpreting the instructions. Compilation and execution are separate operations.
+Compilation and execution are separate operations. The compiler generates the bytecode file, and the runtime interprets the supported instructions. Exact language and runtime capabilities depend on the current implementation.
 
 ## Project Structure
 
-    .
-    ├── boot.asm
-    ├── compiler/
-    │   └── turbix.c
-    ├── drivers/
-    │   ├── ata.c
-    │   ├── keyboard.c
-    │   ├── mouse.c
-    │   ├── pic.c
-    │   ├── pit.c
-    │   ├── ps2.c
-    │   └── vga.c
-    ├── fs/
-    │   ├── fat32.c
-    │   ├── vfs.c
-    │   └── vfs.h
-    ├── gdt/
-    ├── interrupts/
-    ├── kernel/
-    ├── power/
-    ├── runtime/
-    │   └── tex.c
-    ├── time/
-    ├── ui/
-    ├── grub.cfg
-    ├── linker.ld
-    └── Makefile
+```text
+turbOS/
+├── compiler/       # Turbix compiler
+├── drivers/        # ATA, framebuffer, input, VGA, speaker, etc.
+├── fs/             # FAT32 and VFS
+├── gdt/            # GDT implementation and assembly
+├── gui/            # Desktop, graphics, icons, font, memory utilities
+├── interrupts/     # IDT and interrupt service routines
+├── kernel/         # Kernel main, state, accounts
+├── power/          # Power-related routines
+├── runtime/        # TEX bytecode runtime
+├── time/           # RTC
+├── ui/             # Home, terminal, editor, file manager, Pong, saver
+├── boot.asm        # Multiboot2 header and boot entry
+├── kernel.c        # Additional kernel source
+├── linker.ld       # Kernel linker script
+├── grub.cfg        # GRUB boot configuration
+├── Makefile        # Build system
+├── LICENSE
+└── README.md
+```
 
-The tree above highlights the main subsystems. Individual files and supporting modules may change during development.
+The tree highlights the main components. Supporting headers, assembly routines, and resources are kept in their respective directories.
 
 ## Development Status
 
-turbOS is an actively developed hobby operating system. Its current purpose is experimentation and learning, not general-purpose computing.
+turbOS is an actively developed hobby operating system. Its purpose is experimentation, learning, and exploring low-level computing — not general-purpose computing at this stage.
 
-Hardware support is limited, filesystem behavior is not yet comprehensive, and the compiler and bytecode runtime implement only a small set of operations. The project should be tested in an emulator before being used with any physical storage device.
+Hardware support is limited to implemented drivers. Filesystem behavior, graphical components, and the compiler/runtime are evolving. The presence of a component in the source tree does not guarantee that every part is fully integrated or feature-complete.
+
+Test changes in QEMU before experimenting with physical hardware or storage devices.
 
 ## Contributing
 
-Changes should be kept focused and tested in QEMU. Filesystem modifications should be checked for persistence across restarts, while editor changes should be tested by creating, editing, saving, and reopening files.
+Suggestions, bug reports, and technical contributions are welcome.
 
-Compiler and runtime changes should be tested together to ensure that generated TEX files remain compatible with the interpreter.
+- Keep changes focused on the relevant subsystem.
+- Build and test changes in QEMU.
+- Check filesystem modifications for persistence across restarts.
+- Test compiler and runtime changes together.
+- Include relevant build output and reproduction steps when reporting bugs.
+
+The project is under active development, so clear documentation and reproducible testing are appreciated.
 
 ## License
 
-See the `LICENSE` file in the repository for the applicable license terms.
+See [`LICENSE`](LICENSE) for the applicable license terms.
 
 ## Credits
 
-Turbosu Pramanik (c) 2026 all rights reserved. Long Live ##NOAI
+**Turbosu Pramanik © 2026**
+
+An independent hobby OS built through experimentation, debugging, and a refusal to leave low-level computing alone.
+
+**Long live turbOS. Long live `##NOAI`.**
