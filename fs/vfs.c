@@ -559,7 +559,6 @@ void vfs_init(fat32_fs_t *fs)
     }
 }
 
-
 int vfs_get_storage_info(unsigned int *partition_lba,
                          unsigned int *total_sectors)
 {

@@ -797,7 +797,6 @@ int fat32_directory_empty(
     return 1;
 }
 
-
 int fat32_get_space(
     const fat32_fs_t *fs,
     unsigned int *total_bytes,

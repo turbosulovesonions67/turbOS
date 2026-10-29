@@ -10,7 +10,6 @@
 #include "drivers/pic.h"
 #include "drivers/pit.h"
 #include "drivers/vga.h"
-#include "drivers/framebuffer.h"
 
 #include "fs/vfs.h"
 #include "fs/fat32.h"
@@ -24,6 +23,9 @@
 #include "ui/terminal.h"
 #include "ui/filemanager.h"
 #include "ui/pong.h"
+
+#include "gui/gfx.h"
+#include "gui/desktop.h"
 
 static void boot_wait(unsigned int ticks)
 {
@@ -189,7 +191,6 @@ static void process_global_key(int key)
     }
 }
 
-
 #define MULTIBOOT2_BOOT_MAGIC 0x36d76289U
 
 unsigned int memory_total_mib = 0;
@@ -237,9 +238,7 @@ static unsigned int multiboot2_memory_total(unsigned int info_addr)
                 unsigned int length_low = entry[2];
                 unsigned int length_high = entry[3];
                 unsigned int region_mib;
-                
-                /* Each memory-map entry is:
-                   base(64), length(64), type(32), reserved(32). */
+
                 if(entry[4] == 1)
                 {
                     if(length_high > 0x000FFFFFU)
@@ -284,9 +283,10 @@ void kernel_main(unsigned int multiboot_magic,
                   unsigned int multiboot_info_addr)
 {
     multiboot_memory_init(multiboot_magic, multiboot_info_addr);
-    framebuffer_boot_message(multiboot_magic, multiboot_info_addr);
     unsigned char second;
     int filesystem_ok;
+
+    gfx_init_multiboot(multiboot_magic, multiboot_info_addr);
 
     boot_screen();
 
@@ -372,6 +372,9 @@ void kernel_main(unsigned int multiboot_magic,
 
     if(!accounts_init() || !accounts_boot_login())
         kernel_panic_disk();
+
+    if(gfx_ready())
+        desktop_run();
 
     draw_home();
 

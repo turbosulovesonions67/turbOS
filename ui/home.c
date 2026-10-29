@@ -3,7 +3,6 @@
 #include "time/rtc.h"
 #include "drivers/vga.h"
 
-
 static void print_local(
     const char *s,
     int row,

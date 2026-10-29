@@ -146,7 +146,6 @@ void editor_save(void)
         terminal_print("Save failed.");
 }
 
-
 void editor_open_file(vfs_node_t *file)
 {
     unsigned int i;

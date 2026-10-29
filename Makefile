@@ -11,7 +11,6 @@ C_SRC = \
 	fs/vfs.c \
 	fs/fat32.c \
 	drivers/vga.c \
-	drivers/framebuffer.c \
 	drivers/keyboard.c \
 	drivers/mouse.c \
 	drivers/ps2.c \
@@ -30,7 +29,10 @@ C_SRC = \
 	ui/filemanager.c \
 	ui/pong.c \
 	runtime/tex.c \
-	compiler/turbix.c
+	compiler/turbix.c \
+	gui/gfx.c \
+	gui/desktop.c \
+	gui/mem.c
 
 C_OBJ = $(C_SRC:.c=.o)
 
@@ -50,6 +52,9 @@ all: kernel.bin iso diskimg
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
+
+gui/mem.o: gui/mem.c
+	$(CC) $(CFLAGS) -fno-builtin -fno-tree-loop-distribute-patterns -c $< -o $@
 
 boot.o: boot.asm
 	$(AS) -f elf32 $< -o $@

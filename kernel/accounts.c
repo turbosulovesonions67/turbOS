@@ -154,7 +154,6 @@ int accounts_create(const char *name)
     if(vfs_find(users_dir, name))
         return 0;
 
-    /* Every account owns /users/<name>/home. */
     vfs_node_t *user_dir = vfs_create_dir(users_dir, name);
     if(!user_dir)
         return 0;
@@ -340,8 +339,6 @@ int accounts_boot_login(void)
     }
 }
 
-
-/* Delete descendants before their parent; VFS only deletes empty directories. */
 static int system_delete_tree(vfs_node_t *node)
 {
     if(!node)
@@ -406,7 +403,6 @@ void accounts_system_console(void)
             } else if(key == 'y' || key == 'Y') {
                 const char *target = accounts[selected].name;
 
-                /* Never remove the currently logged-in account. */
                 if(!same(target, username)) {
                     vfs_node_t *user_dir = vfs_find(users_dir, target);
                     if(user_dir && system_delete_tree(user_dir)) {

@@ -32,7 +32,6 @@ static void terminal_print_uint(unsigned int value)
     }
 }
 
-
 static int strcmp_local(const char *a, const char *b)
 {
     while(*a && *a == *b)
@@ -990,12 +989,18 @@ else if(!strcmp_local(command, "ls"))
     }
     else if(!strcmp_local(command, "logout"))
     {
+        int login_ok;
+
         terminal_print("Logging out...");
         terminal_input[0] = 0;
         terminal_pos = 0;
         current_screen = SCREEN_HOME;
 
-        if(accounts_boot_login())
+        vga_console_begin();
+        login_ok = accounts_boot_login();
+        vga_console_end();
+
+        if(login_ok)
         {
             current_screen = SCREEN_HOME;
             fm_dir = vfs_get_root();
