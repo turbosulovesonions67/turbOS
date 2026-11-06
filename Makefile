@@ -22,7 +22,6 @@ C_SRC = \
 	gdt/gdt.c \
 	time/rtc.c \
 	power/power.c \
-	ui/home.c \
 	ui/saver.c \
 	ui/editor.c \
 	ui/terminal.c \

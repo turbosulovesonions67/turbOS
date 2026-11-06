@@ -8,13 +8,12 @@
 #include "drivers/pit.h"
 #include "time/rtc.h"
 #include "power/power.h"
-#include "ui/home.h"
 #include "ui/saver.h"
 #include "ui/editor.h"
 #include "ui/terminal.h"
 #include "ui/filemanager.h"
 #include "ui/pong.h"
-#define APP_COUNT 6
+#define APP_COUNT 5
 #define TASKBAR_H     40
 #define TITLE_H       32
 #define CAPTION_W     46
@@ -137,7 +136,6 @@ static const char *app_title(int a)
 {
     switch(a)
     {
-        case SCREEN_HOME:        return "Home";
         case SCREEN_SAVER:       return "Screen Saver";
         case SCREEN_EDITOR:      return "Text Editor";
         case SCREEN_PONG:        return "Pong";
@@ -150,7 +148,6 @@ static const char *app_label(int a)
 {
     switch(a)
     {
-        case SCREEN_HOME:        return "Home";
         case SCREEN_SAVER:       return "Saver";
         case SCREEN_EDITOR:      return "Editor";
         case SCREEN_PONG:        return "Pong";
@@ -163,11 +160,10 @@ static int app_in_order(int position)
 {
     switch(position)
     {
-        case 0: return SCREEN_HOME;
-        case 1: return SCREEN_TERMINAL;
-        case 2: return SCREEN_FILEMANAGER;
-        case 3: return SCREEN_EDITOR;
-        case 4: return SCREEN_PONG;
+        case 0: return SCREEN_TERMINAL;
+        case 1: return SCREEN_FILEMANAGER;
+        case 2: return SCREEN_EDITOR;
+        case 3: return SCREEN_PONG;
         default: return SCREEN_SAVER;
     }
 }
@@ -284,15 +280,8 @@ static void box(int x, int y, int s,
 }
 static void draw_app_icon(int a, int x, int y, int s)
 {
-    int i;
     switch(a)
     {
-    case SCREEN_HOME:
-        for(i = 0; i < 13; i++)
-            box(x, y, s, 15 - i, 3 + i, 2 + 2 * i, 1, GFX_RGB(242, 80, 34));
-        box(x, y, s, 6, 16, 20, 13, C_WHITE);
-        box(x, y, s, 13, 20, 6, 9, C_ACCENT);
-        break;
     case SCREEN_TERMINAL:
         box(x, y, s, 2, 5, 28, 22, GFX_RGB(31, 31, 31));
         box(x, y, s, 2, 5, 28, 4, GFX_RGB(230, 230, 230));
@@ -383,7 +372,6 @@ static void app_redraw(int a)
     current_screen = a;
     switch(a)
     {
-        case SCREEN_HOME:        draw_home();         break;
         case SCREEN_SAVER:       draw_saver();        break;
         case SCREEN_EDITOR:      draw_editor();       break;
         case SCREEN_PONG:        draw_pong();         break;
@@ -1238,12 +1226,6 @@ static void clock_poll(void)
     if(!clock_valid || s != last_sec)
     {
         last_sec = s;
-        if(win_visible(SCREEN_HOME))
-        {
-            vga_surface_override(SCREEN_HOME);
-            home_update_clock();
-            vga_surface_override(-1);
-        }
     }
     clock_valid = 1;
 }
@@ -1349,7 +1331,7 @@ void desktop_init(void)
     dirty_valid = 0;
     blink_on = 1;
     screen_seen = current_screen;
-    launch(SCREEN_HOME);
+    launch(SCREEN_TERMINAL);
     dirty_all();
     desktop_ready = 1;
 }

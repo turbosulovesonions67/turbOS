@@ -5,7 +5,8 @@
 #include "drivers/vga.h"
 #include "drivers/keyboard.h"
 #include "power/power.h"
-#include "ui/home.h"
+#include "time/rtc.h"
+#include "kernel/version.h"
 #include "ui/filemanager.h"
 #include "ui/editor.h"
 #include "fs/vfs.h"
@@ -665,13 +666,12 @@ static void execute_command(void)
         terminal_print("run <f>    execute TEX program");
         terminal_print("turbix -c <f> compile Turbix");
         terminal_print("clear      clear terminal");
-        terminal_print("time       show home clock");
+        terminal_print("time       show the time");
         terminal_print("about      show system information");
         terminal_print("ver        show version");
         terminal_print("fetch      show system info");
         terminal_print("reboot     reboot");
         terminal_print("powoff     power off");
-        terminal_print("exit       return home");
         terminal_print("logout     log out and select account");
     terminal_print("lsblk      show mounted storage volume");
     terminal_print("free -h    show memory status");
@@ -955,7 +955,7 @@ else if(!strcmp_local(command, "ls"))
     }
     else if(!strcmp_local(command, "ver"))
     {
-        terminal_print("turbOS v0.2");
+        terminal_print("turbOS v" TURBOS_VERSION);
     }
     else if(!strcmp_local(command, "about"))
     {
@@ -971,8 +971,22 @@ else if(!strcmp_local(command, "ls"))
     }
     else if(!strcmp_local(command, "time"))
     {
-        terminal_print(
-            "Use the Home clock.");
+        unsigned char h;
+        unsigned char m;
+        unsigned char sec;
+        char text[9];
+
+        rtc_get_time(&h, &m, &sec);
+        text[0] = '0' + h / 10;
+        text[1] = '0' + h % 10;
+        text[2] = ':';
+        text[3] = '0' + m / 10;
+        text[4] = '0' + m % 10;
+        text[5] = ':';
+        text[6] = '0' + sec / 10;
+        text[7] = '0' + sec % 10;
+        text[8] = 0;
+        terminal_print(text);
     }
     else if(!strcmp_local(command, "fetch"))
     {
@@ -982,7 +996,7 @@ else if(!strcmp_local(command, "ls"))
         terminal_print("ttt            \\\\\\");
         terminal_print("ttt              \\\\\\");
         terminal_print("  tttttt          \\\\\\");
-        terminal_print("turbOS v0.2");
+        terminal_print("turbOS v" TURBOS_VERSION);
         terminal_print("Kernel : TASK-32bit");
         terminal_print("Arch   : i386");
         terminal_print("Shell  : turbCMD!");
@@ -994,7 +1008,7 @@ else if(!strcmp_local(command, "ls"))
         terminal_print("Logging out...");
         terminal_input[0] = 0;
         terminal_pos = 0;
-        current_screen = SCREEN_HOME;
+        current_screen = SCREEN_TERMINAL;
 
         vga_console_begin();
         login_ok = accounts_boot_login();
@@ -1002,26 +1016,18 @@ else if(!strcmp_local(command, "ls"))
 
         if(login_ok)
         {
-            current_screen = SCREEN_HOME;
+            current_screen = SCREEN_TERMINAL;
             fm_dir = vfs_get_root();
             fm_index = 0;
             fm_scroll = 0;
-            draw_home();
+            draw_terminal();
         }
         else
         {
             terminal_print("logout: login failed");
-            current_screen = SCREEN_HOME;
-            draw_home();
+            current_screen = SCREEN_TERMINAL;
+            draw_terminal();
         }
-        return;
-    }
-    else if(!strcmp_local(command, "exit"))
-    {
-        current_screen =
-            SCREEN_HOME;
-
-        draw_home();
         return;
     }
     else if(!strcmp_local(command, "reboot"))
@@ -1039,21 +1045,6 @@ else if(!strcmp_local(command, "ls"))
             0x0F);
 
         power_shutdown();
-    }
-    else if(!strcmp_local(command, "bg"))
-    {
-        if(!strcmp_local(arg, "-c"))
-        {
-            home_color = 0x3F;
-
-            terminal_print(
-                "Background changed.");
-        }
-        else
-        {
-            terminal_print(
-                "bg: unknown option");
-        }
     }
     else if(command[0])
     {

@@ -12,9 +12,9 @@ void vga_print(const char *s, int row, int col, unsigned char color);
 void vga_cursor(int row, int col);
 void vga_cursor_hide(void);
 
-#define VGA_SURF_APPS    6
-#define VGA_SURF_CONSOLE 6
-#define VGA_SURF_COUNT   7
+#define VGA_SURF_APPS    5
+#define VGA_SURF_CONSOLE 5
+#define VGA_SURF_COUNT   6
 
 void vga_console_begin(void);
 void vga_console_end(void);

@@ -17,7 +17,6 @@
 #include "time/rtc.h"
 #include "power/power.h"
 
-#include "ui/home.h"
 #include "ui/saver.h"
 #include "ui/editor.h"
 #include "ui/terminal.h"
@@ -153,30 +152,25 @@ static void process_global_key(int key)
 
     if(key == '1')
     {
-        current_screen = SCREEN_HOME;
-        draw_home();
-    }
-    else if(key == '2')
-    {
         current_screen = SCREEN_SAVER;
         draw_saver();
     }
-    else if(key == '3')
+    else if(key == '2')
     {
         current_screen = SCREEN_EDITOR;
         draw_editor();
     }
-    else if(key == '4')
+    else if(key == '3')
     {
         current_screen = SCREEN_PONG;
         draw_pong();
     }
-    else if(key == '5')
+    else if(key == '4')
     {
         current_screen = SCREEN_TERMINAL;
         draw_terminal();
     }
-    else if(key == '6')
+    else if(key == '5')
     {
         current_screen = SCREEN_FILEMANAGER;
         draw_file_manager();
@@ -376,7 +370,7 @@ void kernel_main(unsigned int multiboot_magic,
     if(gfx_ready())
         desktop_run();
 
-    draw_home();
+    draw_terminal();
 
     second =
         rtc_bcd_to_bin(
@@ -393,7 +387,7 @@ void kernel_main(unsigned int multiboot_magic,
             if(key == KEY_CTRL_ALT_S)
             {
                 accounts_system_console();
-                draw_home();
+                draw_terminal();
                 continue;
             }
 
@@ -423,19 +417,6 @@ void kernel_main(unsigned int multiboot_magic,
 
                 if(key == 's' && paddle_y < 22)
                     paddle_y++;
-            }
-        }
-
-        if(current_screen == SCREEN_HOME)
-        {
-            unsigned int sec =
-                rtc_bcd_to_bin(
-                    rtc_read(0x00));
-
-            if(sec != last_second)
-            {
-                last_second = sec;
-                home_update_clock();
             }
         }
 

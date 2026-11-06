@@ -4,12 +4,11 @@
 #include "fs/vfs.h"
 #include "fs/fat32.h"
 
-#define SCREEN_HOME 0
-#define SCREEN_SAVER 1
-#define SCREEN_EDITOR 2
-#define SCREEN_PONG 3
-#define SCREEN_TERMINAL 4
-#define SCREEN_FILEMANAGER 5
+#define SCREEN_SAVER 0
+#define SCREEN_EDITOR 1
+#define SCREEN_PONG 2
+#define SCREEN_TERMINAL 3
+#define SCREEN_FILEMANAGER 4
 
 #define MAX_LINES 512
 #define MAX_COLS 80
@@ -22,8 +21,6 @@ extern const char *hostname;
 
 extern int current_screen;
 extern int ctrl_pressed;
-
-extern unsigned char home_color;
 
 extern char terminal_input[80];
 extern int terminal_pos;

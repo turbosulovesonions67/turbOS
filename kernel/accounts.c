@@ -209,7 +209,6 @@ int accounts_login(int index)
     fm_dir = home_dir;
     fm_index = 0;
     fm_scroll = 0;
-    home_color = 0x1F;
 
     return 1;
 }

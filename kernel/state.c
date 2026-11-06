@@ -3,10 +3,9 @@
 const char *username = "liveuser";
 const char *hostname = "turbOS";
 
-int current_screen = SCREEN_HOME;
+int current_screen = SCREEN_TERMINAL;
 int ctrl_pressed = 0;
 
-unsigned char home_color = 0x1F;
 
 char terminal_input[80];
 int terminal_pos = 0;

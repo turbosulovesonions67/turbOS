@@ -7,7 +7,7 @@ void draw_saver(void)
     vga_clear(0x01);
 
     vga_print(
-        "Ctrl+1 Home Ctrl+3 Editor Ctrl+4 Pong",
+        "Ctrl+2 Editor Ctrl+3 Pong Ctrl+4 Terminal",
         0,
         0,
         0x0F);
