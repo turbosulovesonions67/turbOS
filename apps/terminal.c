@@ -1,4 +1,6 @@
-#include "ui/terminal.h"
+#include "apps/terminal.h"
+#include "apps/app.h"
+#include "gui/gfx.h"
 #include "kernel/state.h"
 #include "kernel/memory.h"
 #include "kernel/accounts.h"
@@ -7,8 +9,8 @@
 #include "power/power.h"
 #include "time/rtc.h"
 #include "kernel/version.h"
-#include "ui/filemanager.h"
-#include "ui/editor.h"
+#include "apps/filemanager.h"
+#include "apps/editor.h"
 #include "fs/vfs.h"
 #include "runtime/tex.h"
 #include "compiler/turbix.h"
@@ -1141,3 +1143,30 @@ void handle_terminal_key(int key)
         draw_terminal();
     }
 }
+
+static void terminal_icon(int x, int y, int s)
+{
+        app_icon_box(x, y, s, 2, 5, 28, 22, GFX_RGB(31, 31, 31));
+        app_icon_box(x, y, s, 2, 5, 28, 4, GFX_RGB(230, 230, 230));
+        gfx_line(x + app_icon_sc(7, s), y + app_icon_sc(12, s),
+                 x + app_icon_sc(12, s), y + app_icon_sc(16, s), GFX_RGB(22, 198, 12));
+        gfx_line(x + app_icon_sc(12, s), y + app_icon_sc(16, s),
+                 x + app_icon_sc(7, s), y + app_icon_sc(20, s), GFX_RGB(22, 198, 12));
+        if(s >= 24)
+        {
+            gfx_line(x + app_icon_sc(7, s) + 1, y + app_icon_sc(12, s),
+                     x + app_icon_sc(12, s) + 1, y + app_icon_sc(16, s), GFX_RGB(22, 198, 12));
+            gfx_line(x + app_icon_sc(12, s) + 1, y + app_icon_sc(16, s),
+                     x + app_icon_sc(7, s) + 1, y + app_icon_sc(20, s), GFX_RGB(22, 198, 12));
+        }
+        app_icon_box(x, y, s, 15, 20, 8, 2, GFX_RGB(204, 204, 204));
+}
+
+const app_t terminal_app =
+{
+    SCREEN_TERMINAL, "Terminal", "Terminal",
+    0, 0,
+    handle_terminal_key, terminal_icon,
+    0, 0, APP_TICK_VISIBLE,
+    0, draw_terminal
+};

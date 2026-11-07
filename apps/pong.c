@@ -1,4 +1,6 @@
-#include "ui/pong.h"
+#include "apps/pong.h"
+#include "apps/app.h"
+#include "gui/gfx.h"
 #include "kernel/state.h"
 #include "drivers/vga.h"
 
@@ -97,3 +99,28 @@ void update_pong(void)
 
     draw_pong();
 }
+
+void pong_key(int key)
+{
+    if(key == 'w' && paddle_y > 1)
+        paddle_y--;
+    if(key == 's' && paddle_y < 22)
+        paddle_y++;
+}
+
+static void pong_icon(int x, int y, int s)
+{
+        app_icon_box(x, y, s, 2, 4, 28, 24, GFX_RGB(27, 27, 27));
+        app_icon_box(x, y, s, 6, 10, 3, 10, APP_WHITE);
+        app_icon_box(x, y, s, 23, 12, 3, 10, APP_WHITE);
+        app_icon_box(x, y, s, 15, 14, 3, 3, APP_WHITE);
+}
+
+const app_t pong_app =
+{
+    SCREEN_PONG, "Pong", "Pong",
+    0, 0,
+    pong_key, pong_icon,
+    update_pong, 5, APP_TICK_FOCUS,
+    0, draw_pong
+};

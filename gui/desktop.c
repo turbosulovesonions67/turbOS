@@ -1,4 +1,6 @@
 #include "gui/desktop.h"
+#include "apps/app.h"
+#include "apps/editor.h"
 #include "gui/gfx.h"
 #include "kernel/state.h"
 #include "kernel/accounts.h"
@@ -8,12 +10,6 @@
 #include "drivers/pit.h"
 #include "time/rtc.h"
 #include "power/power.h"
-#include "ui/saver.h"
-#include "ui/editor.h"
-#include "ui/terminal.h"
-#include "ui/filemanager.h"
-#include "ui/pong.h"
-#define APP_COUNT 5
 #define TASKBAR_H     40
 #define TITLE_H       32
 #define CAPTION_W     46
@@ -86,6 +82,7 @@ typedef struct
     int ry;
 } window_t;
 static window_t win[APP_COUNT];
+static unsigned int last_tick[APP_COUNT];
 static int zorder[APP_COUNT];
 static int scr_w;
 static int scr_h;
@@ -134,38 +131,19 @@ static int in_rect(int px, int py, int x, int y, int w, int h)
 }
 static const char *app_title(int a)
 {
-    switch(a)
-    {
-        case SCREEN_SAVER:       return "Screen Saver";
-        case SCREEN_EDITOR:      return "Text Editor";
-        case SCREEN_PONG:        return "Pong";
-        case SCREEN_TERMINAL:    return "Terminal";
-        case SCREEN_FILEMANAGER: return "File Manager";
-    }
-    return "";
+    const app_t *app = app_by_screen(a);
+    return app ? app->title : "";
 }
 static const char *app_label(int a)
 {
-    switch(a)
-    {
-        case SCREEN_SAVER:       return "Saver";
-        case SCREEN_EDITOR:      return "Editor";
-        case SCREEN_PONG:        return "Pong";
-        case SCREEN_TERMINAL:    return "Terminal";
-        case SCREEN_FILEMANAGER: return "Files";
-    }
-    return "";
+    const app_t *app = app_by_screen(a);
+    return app ? app->label : "";
 }
 static int app_in_order(int position)
 {
-    switch(position)
-    {
-        case 0: return SCREEN_TERMINAL;
-        case 1: return SCREEN_FILEMANAGER;
-        case 2: return SCREEN_EDITOR;
-        case 3: return SCREEN_PONG;
-        default: return SCREEN_SAVER;
-    }
+    if(position < 0 || position >= APP_COUNT)
+        position = APP_COUNT - 1;
+    return app_table[position]->screen;
 }
 static int win_visible(int a)
 {
@@ -261,73 +239,11 @@ static void dirty_clock(void)
 {
     dirty_add(scr_w - SHOW_W - CLOCK_W, taskbar_y(), CLOCK_W, TASKBAR_H);
 }
-static int sc(int v, int s)
-{
-    return (v * s + 16) / 32;
-}
-static void box(int x, int y, int s,
-                int ax, int ay, int aw, int ah, uint32_t c)
-{
-    int x0 = x + sc(ax, s);
-    int y0 = y + sc(ay, s);
-    int x1 = x + sc(ax + aw, s);
-    int y1 = y + sc(ay + ah, s);
-    if(x1 <= x0)
-        x1 = x0 + 1;
-    if(y1 <= y0)
-        y1 = y0 + 1;
-    gfx_fill_rect(x0, y0, x1 - x0, y1 - y0, c);
-}
 static void draw_app_icon(int a, int x, int y, int s)
 {
-    switch(a)
-    {
-    case SCREEN_TERMINAL:
-        box(x, y, s, 2, 5, 28, 22, GFX_RGB(31, 31, 31));
-        box(x, y, s, 2, 5, 28, 4, GFX_RGB(230, 230, 230));
-        gfx_line(x + sc(7, s), y + sc(12, s),
-                 x + sc(12, s), y + sc(16, s), GFX_RGB(22, 198, 12));
-        gfx_line(x + sc(12, s), y + sc(16, s),
-                 x + sc(7, s), y + sc(20, s), GFX_RGB(22, 198, 12));
-        if(s >= 24)
-        {
-            gfx_line(x + sc(7, s) + 1, y + sc(12, s),
-                     x + sc(12, s) + 1, y + sc(16, s), GFX_RGB(22, 198, 12));
-            gfx_line(x + sc(12, s) + 1, y + sc(16, s),
-                     x + sc(7, s) + 1, y + sc(20, s), GFX_RGB(22, 198, 12));
-        }
-        box(x, y, s, 15, 20, 8, 2, GFX_RGB(204, 204, 204));
-        break;
-    case SCREEN_FILEMANAGER:
-        box(x, y, s, 2, 6, 13, 6, GFX_RGB(227, 168, 30));
-        box(x, y, s, 2, 10, 28, 17, GFX_RGB(255, 211, 90));
-        box(x, y, s, 2, 15, 28, 12, GFX_RGB(255, 224, 138));
-        break;
-    case SCREEN_EDITOR:
-        box(x, y, s, 6, 3, 20, 26, C_WHITE);
-        box(x, y, s, 6, 3, 20, 1, GFX_RGB(200, 200, 200));
-        box(x, y, s, 10, 8, 8, 2, C_ACCENT);
-        box(x, y, s, 10, 13, 12, 2, GFX_RGB(150, 160, 170));
-        box(x, y, s, 10, 18, 12, 2, GFX_RGB(150, 160, 170));
-        box(x, y, s, 10, 23, 9, 2, GFX_RGB(150, 160, 170));
-        break;
-    case SCREEN_PONG:
-        box(x, y, s, 2, 4, 28, 24, GFX_RGB(27, 27, 27));
-        box(x, y, s, 6, 10, 3, 10, C_WHITE);
-        box(x, y, s, 23, 12, 3, 10, C_WHITE);
-        box(x, y, s, 15, 14, 3, 3, C_WHITE);
-        break;
-    case SCREEN_SAVER:
-        box(x, y, s, 2, 4, 28, 24, GFX_RGB(31, 45, 99));
-        gfx_fill_circle(x + sc(15, s), y + sc(16, s), sc(7, s),
-                        GFX_RGB(255, 216, 107));
-        gfx_fill_circle(x + sc(19, s), y + sc(14, s), sc(6, s),
-                        GFX_RGB(31, 45, 99));
-        box(x, y, s, 24, 8, 2, 2, C_WHITE);
-        box(x, y, s, 8, 9, 2, 2, C_WHITE);
-        box(x, y, s, 24, 22, 2, 2, C_WHITE);
-        break;
-    }
+    const app_t *app = app_by_screen(a);
+    if(app && app->icon)
+        app->icon(x, y, s);
 }
 static void raise_window(int a)
 {
@@ -370,13 +286,10 @@ static void app_redraw(int a)
 {
     int saved = current_screen;
     current_screen = a;
-    switch(a)
     {
-        case SCREEN_SAVER:       draw_saver();        break;
-        case SCREEN_EDITOR:      draw_editor();       break;
-        case SCREEN_PONG:        draw_pong();         break;
-        case SCREEN_TERMINAL:    draw_terminal();     break;
-        case SCREEN_FILEMANAGER: draw_file_manager(); break;
+        const app_t *app = app_by_screen(a);
+        if(app && app->text_redraw)
+            app->text_redraw();
     }
     current_screen = saved;
 }
@@ -742,6 +655,11 @@ static void draw_caption_buttons(int a, int active)
                            x + CAPTION_W / 2, y + TITLE_H / 2, fg, bg);
     }
 }
+static const app_t *native_of(int a)
+{
+    const app_t *app = app_by_screen(a);
+    return app && app->draw ? app : 0;
+}
 static void draw_client(int a, int cx, int cy, int cw, int ch, int active)
 {
     int gx = cx + (cw - CLIENT_W) / 2;
@@ -762,6 +680,12 @@ static void draw_client(int a, int cx, int cy, int cw, int ch, int active)
     int c1;
     int crow;
     int ccol;
+    const app_t *nat = native_of(a);
+    if(nat)
+    {
+        nat->draw(cx, cy, cw, ch);
+        return;
+    }
     if(cw != CLIENT_W || ch != CLIENT_H)
     {
         unsigned short first = vga_surface_cell(a, 0, 0);
@@ -998,24 +922,10 @@ static void route_key(int key)
 {
     if(focus < 0)
         return;
-    if(focus == SCREEN_EDITOR)
     {
-        handle_editor_key(key);
-    }
-    else if(focus == SCREEN_TERMINAL)
-    {
-        handle_terminal_key(key);
-    }
-    else if(focus == SCREEN_FILEMANAGER)
-    {
-        handle_file_manager_key(key);
-    }
-    else if(focus == SCREEN_PONG)
-    {
-        if(key == 'w' && paddle_y > 1)
-            paddle_y--;
-        if(key == 's' && paddle_y < 22)
-            paddle_y++;
+        const app_t *app = app_by_screen(focus);
+        if(app && app->key)
+            app->key(key);
     }
 }
 static void handle_keys(void)
@@ -1046,6 +956,8 @@ static void handle_keys(void)
             continue;
         }
         route_key(key);
+        if(focus >= 0 && native_of(focus))
+            dirty_win(focus);
         sync_focus();
     }
 }
@@ -1120,10 +1032,19 @@ static void on_press(int mx, int my, int id)
     else if(id >= ID_CLIENT && id < ID_CAPTION)
     {
         int a = id - ID_CLIENT;
+        const app_t *nat = native_of(a);
         if(focus != a)
         {
             raise_window(a);
             set_focus(a);
+            dirty_win(a);
+        }
+        if(nat)
+        {
+            int bw = win[a].maximized ? 0 : 1;
+            nat->mouse(win_x(a) + bw, win_y(a) + bw + TITLE_H,
+                       win_w(a) - 2 * bw, win_h(a) - 2 * bw - TITLE_H,
+                       mx, my);
             dirty_win(a);
         }
     }
@@ -1168,7 +1089,7 @@ static void on_press(int mx, int my, int id)
             selected_icon = -1;
         }
     }
-    (void)my;
+    
 }
 static void handle_mouse(int mx, int my, int left)
 {
@@ -1231,20 +1152,20 @@ static void clock_poll(void)
 }
 static void tick_apps(void)
 {
-    if(win_visible(SCREEN_SAVER) &&
-       timer_ticks - last_saver_tick >= 20)
+    int i;
+    for(i = 0; i < APP_COUNT; i++)
     {
-        last_saver_tick = timer_ticks;
-        vga_surface_override(SCREEN_SAVER);
-        update_saver();
-        draw_saver();
-        vga_surface_override(-1);
-    }
-    if(focus == SCREEN_PONG &&
-       timer_ticks - last_pong_tick >= 5)
-    {
-        last_pong_tick = timer_ticks;
-        update_pong();
+        const app_t *app = app_table[i];
+        int a = app->screen;
+        int run;
+        if(!app->tick)
+            continue;
+        run = app->tick_when == APP_TICK_FOCUS ? focus == a : win_visible(a);
+        if(run && timer_ticks - last_tick[a] >= (unsigned int)app->tick_period)
+        {
+            last_tick[a] = timer_ticks;
+            app->tick();
+        }
     }
 }
 static void sync_surfaces(void)

@@ -17,11 +17,11 @@
 #include "time/rtc.h"
 #include "power/power.h"
 
-#include "ui/saver.h"
-#include "ui/editor.h"
-#include "ui/terminal.h"
-#include "ui/filemanager.h"
-#include "ui/pong.h"
+#include "apps/saver.h"
+#include "apps/editor.h"
+#include "apps/terminal.h"
+#include "apps/filemanager.h"
+#include "apps/pong.h"
 
 #include "gui/gfx.h"
 #include "gui/desktop.h"

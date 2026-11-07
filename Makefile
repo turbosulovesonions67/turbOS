@@ -22,11 +22,12 @@ C_SRC = \
 	gdt/gdt.c \
 	time/rtc.c \
 	power/power.c \
-	ui/saver.c \
-	ui/editor.c \
-	ui/terminal.c \
-	ui/filemanager.c \
-	ui/pong.c \
+	apps/apps.c \
+	apps/saver.c \
+	apps/editor.c \
+	apps/terminal.c \
+	apps/filemanager.c \
+	apps/pong.c \
 	runtime/tex.c \
 	compiler/turbix.c \
 	gui/gfx.c \

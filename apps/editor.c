@@ -1,8 +1,10 @@
-#include "ui/editor.h"
+#include "apps/editor.h"
+#include "apps/app.h"
+#include "gui/gfx.h"
 #include "kernel/state.h"
 #include "drivers/vga.h"
 #include "drivers/keyboard.h"
-#include "ui/terminal.h"
+#include "apps/terminal.h"
 
 static void editor_refresh_cursor(void);
 
@@ -371,3 +373,22 @@ void handle_editor_key(int key)
         draw_editor();
     }
 }
+
+static void editor_icon(int x, int y, int s)
+{
+        app_icon_box(x, y, s, 6, 3, 20, 26, APP_WHITE);
+        app_icon_box(x, y, s, 6, 3, 20, 1, GFX_RGB(200, 200, 200));
+        app_icon_box(x, y, s, 10, 8, 8, 2, GFX_RGB(0, 120, 215));
+        app_icon_box(x, y, s, 10, 13, 12, 2, GFX_RGB(150, 160, 170));
+        app_icon_box(x, y, s, 10, 18, 12, 2, GFX_RGB(150, 160, 170));
+        app_icon_box(x, y, s, 10, 23, 9, 2, GFX_RGB(150, 160, 170));
+}
+
+const app_t editor_app =
+{
+    SCREEN_EDITOR, "Text Editor", "Editor",
+    0, 0,
+    handle_editor_key, editor_icon,
+    0, 0, APP_TICK_VISIBLE,
+    0, draw_editor
+};

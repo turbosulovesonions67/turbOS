@@ -50,6 +50,21 @@ static void copy32(uint32_t *dst, const uint32_t *src, int n)
 #endif
 }
 
+static void fill32(uint32_t *dst, uint32_t value, int n)
+{
+#if defined(__i386__)
+    __asm__ volatile("cld; rep stosl"
+                     : "+D"(dst), "+c"(n)
+                     : "a"(value)
+                     : "memory", "cc");
+#else
+    int i;
+
+    for(i = 0; i < n; i++)
+        dst[i] = value;
+#endif
+}
+
 static const unsigned char *glyph_for(char ch)
 {
     unsigned char c = (unsigned char)ch;
@@ -275,12 +290,8 @@ void gfx_fill_rect(int x, int y, int w, int h, uint32_t color)
         return;
 
     for(yy = y; yy < y1; yy++)
-    {
-        uint32_t *p = scene + yy * g_w + x;
-
-        for(xx = x; xx < x1; xx++)
-            *p++ = color;
-    }
+        fill32(scene + yy * g_w + x, color, x1 - x);
+    (void)xx;
 }
 
 void gfx_hline(int x, int y, int w, uint32_t color)

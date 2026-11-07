@@ -1,5 +1,5 @@
 #include "../fs/vfs.h"
-#include "../ui/terminal.h"
+#include "../apps/terminal.h"
 #include "turbix.h"
 
 #define TEX_OP_HALT 0x00

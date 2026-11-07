@@ -1,7 +1,7 @@
 #include <stddef.h>
 #include "../fs/vfs.h"
 #include "../drivers/speaker.h"
-#include "../ui/terminal.h"
+#include "../apps/terminal.h"
 #include "tex.h"
 
 #define TEX_OP_HALT 0x00
