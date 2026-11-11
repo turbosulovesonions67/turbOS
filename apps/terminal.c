@@ -1,3 +1,4 @@
+#include <stdarg.h>
 #include "apps/terminal.h"
 #include "apps/app.h"
 #include "gui/gfx.h"
@@ -14,26 +15,7 @@
 #include "fs/vfs.h"
 #include "runtime/tex.h"
 #include "compiler/turbix.h"
-
-static void terminal_print_uint(unsigned int value)
-{
-    char digits[11];
-    unsigned int count = 0;
-
-    do
-    {
-        digits[count++] = (char)('0' + value % 10);
-        value /= 10;
-    } while(value && count < sizeof(digits));
-
-    while(count)
-    {
-        char output[2];
-        output[0] = digits[--count];
-        output[1] = '\0';
-        terminal_print(output);
-    }
-}
+#include "drivers/pit.h"
 
 static int strcmp_local(const char *a, const char *b)
 {
@@ -612,6 +594,237 @@ static int parse_compile_argument(
     return 1;
 }
 
+#define TC_CYAN "\001"
+#define TC_YELLOW "\002"
+#define TC_RESET "\007"
+#define TC_WHITE "\010"
+#define END ((const char *)0)
+#define KERNEL_KIB (((unsigned int)stack_top - 0x100000U) / 1024U)
+
+extern char stack_top[];
+
+static const char *const fetch_logo[] =
+{
+    TC_WHITE "ttt        \\\\\\",
+    TC_WHITE "ttt          \\\\\\",
+    TC_WHITE "tttttttt      \\\\\\",
+    TC_WHITE "ttt            \\\\\\",
+    TC_WHITE "ttt              \\\\\\",
+    TC_WHITE "  tttttt          \\\\\\"
+};
+
+static int fetch_pos;
+
+static void text_add(char *dst, const char *src)
+{
+    int i = strlen_local(dst);
+
+    while(*src && i < TERMINAL_WIDTH - 1)
+        dst[i++] = *src++;
+
+    dst[i] = 0;
+}
+
+static void text_pad(char *dst, int width)
+{
+    int shown = 0;
+    int i = 0;
+
+    while(dst[i])
+        shown += dst[i++] >= 9;
+
+    while(shown++ < width && i < TERMINAL_WIDTH - 1)
+        dst[i++] = ' ';
+
+    dst[i] = 0;
+}
+
+static void text_uint(char *dst, unsigned int value)
+{
+    char digit[2];
+
+    if(value >= 10)
+        text_uint(dst, value / 10);
+
+    digit[0] = (char)('0' + value % 10);
+    digit[1] = 0;
+    text_add(dst, digit);
+}
+
+static void text_kib(char *dst, unsigned int kib)
+{
+    text_uint(dst, kib >= 1024 ? kib / 1024 : kib);
+    text_add(dst, kib >= 1024 ? " MiB" : " KiB");
+}
+
+static void text_usage(char *dst, unsigned int used, unsigned int total)
+{
+    text_kib(dst, used);
+    text_add(dst, " / ");
+    text_kib(dst, total);
+}
+
+static const char *kib_text(unsigned int kib)
+{
+    static char pool[4][16];
+    static int next;
+    char *out = pool[next++ & 3];
+
+    out[0] = 0;
+    text_kib(out, kib);
+    return out;
+}
+
+static void cols(const char *cell, ...)
+{
+    char line[TERMINAL_WIDTH];
+    va_list args;
+    int n = 0;
+
+    line[0] = 0;
+    va_start(args, cell);
+
+    for(; cell; cell = va_arg(args, const char *))
+    {
+        text_add(line, cell);
+        text_pad(line, ++n * 10);
+    }
+
+    va_end(args);
+    terminal_print(line);
+}
+
+static void command_lsblk(void)
+{
+    unsigned int lba;
+    unsigned int sectors;
+    unsigned int total;
+    unsigned int used;
+    unsigned int avail;
+
+    if(!vfs_get_storage_info(&lba, &sectors) ||
+       !fat32_get_space(&filesystem, &total, &used, &avail))
+    {
+        terminal_print("No mounted storage volume");
+        return;
+    }
+
+    cols(TC_CYAN "NAME", "TYPE", "FSTYPE", "SIZE", "USED", "FREE", "MOUNT", END);
+    cols(TC_RESET "hda", lba ? "part" : "disk", "fat32", kib_text(sectors / 2U),
+         kib_text(used / 1024U), kib_text(avail / 1024U), "/", END);
+}
+
+static void command_ram(void)
+{
+    unsigned int total = memory_total_mib * 1024U;
+
+    if(!memory_map_available)
+    {
+        terminal_print("Memory map unavailable.");
+        terminal_print("Check Multiboot2 bootloader support.");
+        return;
+    }
+
+    cols(TC_CYAN "", "total", "kernel", "available", END);
+    cols(TC_YELLOW "Mem" TC_RESET, kib_text(total), kib_text(KERNEL_KIB),
+         kib_text(total - KERNEL_KIB), END);
+}
+
+static void fetch_row(const char *key, const char *value)
+{
+    char line[TERMINAL_WIDTH];
+
+    line[0] = 0;
+
+    if(fetch_pos < (int)(sizeof(fetch_logo) / sizeof(fetch_logo[0])))
+        text_add(line, fetch_logo[fetch_pos]);
+
+    fetch_pos++;
+    text_pad(line, 24);
+    text_add(line, TC_CYAN);
+
+    if(key)
+    {
+        text_add(line, key);
+        text_add(line, ": " TC_RESET);
+    }
+
+    text_add(line, value);
+    terminal_print(line);
+}
+
+static void command_fetch(void)
+{
+    char value[TERMINAL_WIDTH];
+    char rule[TERMINAL_WIDTH];
+    char block[] = "\001###";
+    unsigned int total;
+    unsigned int used;
+    unsigned int avail;
+    unsigned int up = timer_ticks / 100U;
+    int i;
+
+    fetch_pos = 0;
+    value[0] = 0;
+    text_add(value, username);
+    text_add(value, "@");
+    text_add(value, hostname);
+    fetch_row(0, value);
+
+    for(i = 0; value[i]; i++)
+        rule[i] = '-';
+
+    rule[i] = 0;
+    fetch_row(0, rule);
+    fetch_row("OS", "turbOS v" TURBOS_VERSION " i386");
+    fetch_row("Kernel", "TASK-32bit");
+
+    value[0] = 0;
+    text_uint(value, up / 3600U);
+    text_add(value, "h ");
+    text_uint(value, up / 60U % 60U);
+    text_add(value, "m ");
+    text_uint(value, up % 60U);
+    text_add(value, "s");
+    fetch_row("Uptime", value);
+    fetch_row("Shell", "turbCMD!");
+
+    value[0] = 0;
+    text_uint(value, gfx_width());
+    text_add(value, "x");
+    text_uint(value, gfx_height());
+    fetch_row("Resolution", value);
+
+    value[0] = 0;
+
+    if(memory_map_available)
+        text_usage(value, KERNEL_KIB, memory_total_mib * 1024U);
+    else
+        text_add(value, "unavailable");
+
+    fetch_row("Memory", value);
+
+    value[0] = 0;
+
+    if(fat32_get_space(&filesystem, &total, &used, &avail))
+    {
+        text_usage(value, used / 1024U, total / 1024U);
+        text_add(value, " (fat32)");
+    }
+    else
+        text_add(value, "none");
+
+    fetch_row("Disk (/)", value);
+    fetch_row(0, "");
+
+    value[0] = 0;
+
+    for(; block[0] < 7; block[0]++)
+        text_add(value, block);
+
+    fetch_row(0, value);
+}
+
 static void execute_command(void)
 {
     char command[80];
@@ -675,49 +888,18 @@ static void execute_command(void)
         terminal_print("reboot     reboot");
         terminal_print("powoff     power off");
         terminal_print("logout     log out and select account");
-    terminal_print("lsblk      show mounted storage volume");
-    terminal_print("free -h    show memory status");
+    terminal_print("lsblk      list storage devices");
+    terminal_print("ram        show memory usage");
     }
     else if(!strcmp_local(command, "lsblk"))
-{
-    unsigned int partition_lba;
-    unsigned int total_sectors;
-    unsigned int size_mib;
-
-    terminal_print("NAME     TYPE   SIZE");
-    if(vfs_get_storage_info(&partition_lba, &total_sectors))
     {
-        terminal_print("fat32    volume ");
-        size_mib = total_sectors / 2048U;
-        terminal_print_uint(size_mib);
-        terminal_print(" MiB");
-        terminal_print("Start LBA: ");
-        terminal_print_uint(partition_lba);
+        command_lsblk();
     }
-    else
+    else if(!strcmp_local(command, "ram") ||
+            !strcmp_local(command, "free"))
     {
-        terminal_print("No mounted storage volume");
+        command_ram();
     }
-}
-else if(!strcmp_local(command, "free"))
-{
-    if(arg[0] != '\0' && strcmp_local(arg, "-h"))
-    {
-        terminal_print("Usage: free -h");
-    }
-    else if(!memory_map_available)
-    {
-        terminal_print("Memory map unavailable.");
-        terminal_print("Check Multiboot2 bootloader support.");
-    }
-    else
-    {
-        terminal_print("Usable RAM total: ");
-        terminal_print_uint(memory_total_mib);
-        terminal_print(" MiB");
-        terminal_print("Used/free breakdown is not implemented yet.");
-    }
-}
 else if(!strcmp_local(command, "ls"))
     {
         command_ls();
@@ -992,16 +1174,7 @@ else if(!strcmp_local(command, "ls"))
     }
     else if(!strcmp_local(command, "fetch"))
     {
-        terminal_print("ttt        \\\\\\");
-        terminal_print("ttt          \\\\\\");
-        terminal_print("tttttttt      \\\\\\");
-        terminal_print("ttt            \\\\\\");
-        terminal_print("ttt              \\\\\\");
-        terminal_print("  tttttt          \\\\\\");
-        terminal_print("turbOS v" TURBOS_VERSION);
-        terminal_print("Kernel : TASK-32bit");
-        terminal_print("Arch   : i386");
-        terminal_print("Shell  : turbCMD!");
+        command_fetch();
     }
     else if(!strcmp_local(command, "logout"))
     {
@@ -1055,6 +1228,173 @@ else if(!strcmp_local(command, "ls"))
     }
 }
 
+#define TM_BG GFX_RGB(24, 24, 24)
+#define TM_BAR GFX_RGB(45, 45, 45)
+#define TM_LINE GFX_RGB(70, 70, 70)
+#define TM_TEXT GFX_RGB(210, 210, 210)
+#define TM_DIM GFX_RGB(140, 140, 140)
+#define TM_PROMPT GFX_RGB(80, 220, 100)
+#define TM_BTN GFX_RGB(62, 62, 62)
+#define TM_TOOL_H 38
+#define TM_ROW_H 18
+#define TM_PAD 10
+#define TM_SCROLL_W 14
+#define TM_BTN_W 80
+#define TM_BTN_H 26
+
+static int gui_rows;
+
+static int history_rows(void)
+{
+    return gui_rows > 1 ? gui_rows - 1 : 23;
+}
+
+static int prompt_len_of(const char *line, const char *prompt)
+{
+    int i = 0;
+
+    while(prompt[i])
+    {
+        if(line[i] != prompt[i])
+            return 0;
+
+        i++;
+    }
+
+    return i;
+}
+
+static const uint32_t term_palette[9] =
+{
+    TM_TEXT, GFX_RGB(80, 200, 220), GFX_RGB(230, 200, 80), TM_PROMPT,
+    GFX_RGB(230, 90, 90), GFX_RGB(200, 110, 220), GFX_RGB(90, 140, 240), TM_TEXT,
+    GFX_RGB(255, 255, 255)
+};
+
+static void term_line(int x, int y, const char *s, int plen, int cols)
+{
+    uint32_t fg = TM_TEXT;
+    int col = 0;
+
+    for(int i = 0; s[i] && col < cols; i++)
+    {
+        if((unsigned char)s[i] < 9)
+        {
+            fg = term_palette[(int)s[i]];
+            continue;
+        }
+
+        gfx_draw_char(x + col * 8, y, s[i], i < plen ? TM_PROMPT : fg);
+        col++;
+    }
+}
+
+static void terminal_draw(int x, int y, int w, int h)
+{
+    char prompt[TERMINAL_WIDTH];
+    char path[TERMINAL_WIDTH];
+    int top = y + TM_TOOL_H;
+    int body = top + TM_PAD;
+    int rows = (h - TM_TOOL_H - 2 * TM_PAD) / TM_ROW_H;
+    int cols = (w - 2 * TM_PAD - TM_SCROLL_W) / 8;
+    int hist;
+    int start;
+    int shown;
+    int plen;
+
+    gui_rows = rows < 2 ? 2 : rows;
+    hist = history_rows();
+    start = output_lines - hist - terminal_scroll;
+
+    if(start < 0)
+        start = 0;
+
+    build_prompt(prompt);
+    build_path(path);
+    plen = strlen_local(prompt);
+
+    gfx_fill_rect(x, y, w, h, TM_BG);
+    gfx_fill_rect(x, y, w, TM_TOOL_H, TM_BAR);
+    gfx_hline(x, top - 1, w, TM_LINE);
+    gfx_fill_rect(x + 8, y + 6, TM_BTN_W, TM_BTN_H, TM_BTN);
+    gfx_rect_outline(x + 8, y + 6, TM_BTN_W, TM_BTN_H, TM_LINE);
+    gfx_draw_text(x + 8 + (TM_BTN_W - gfx_text_width("Clear")) / 2,
+                  y + 11, "Clear", TM_TEXT);
+    gfx_draw_text(x + TM_BTN_W + 22, y + 11, path, TM_DIM);
+
+    for(shown = 0; shown < hist && start + shown < output_lines; shown++)
+    {
+        const char *line = terminal_output[start + shown];
+
+        term_line(x + TM_PAD, body + shown * TM_ROW_H, line,
+                  prompt_len_of(line, prompt), cols);
+    }
+
+    if(terminal_scroll == 0)
+    {
+        int py = body + shown * TM_ROW_H;
+        int caret = plen + 1 + terminal_pos;
+
+        term_line(x + TM_PAD, py, prompt, plen, cols);
+
+        if(cols > plen + 1)
+            term_line(x + TM_PAD + (plen + 1) * 8, py,
+                      terminal_input, 0, cols - plen - 1);
+
+        if(caret < cols)
+            gfx_fill_rect(x + TM_PAD + caret * 8, py, 8, 16, TM_TEXT);
+    }
+
+    gfx_fill_rect(x + w - TM_SCROLL_W, top, TM_SCROLL_W, h - TM_TOOL_H, TM_BAR);
+
+    if(output_lines > hist)
+    {
+        int track = h - TM_TOOL_H;
+        int span = output_lines - hist;
+        int thumb = track * hist / output_lines;
+        int pos;
+
+        if(thumb < 16)
+            thumb = 16;
+
+        pos = (track - thumb) * (span - terminal_scroll) / span;
+
+        gfx_fill_rect(x + w - TM_SCROLL_W + 2, top + pos,
+                      TM_SCROLL_W - 4, thumb, TM_DIM);
+    }
+}
+
+static int in_box(int mx, int my, int x, int y, int w, int h)
+{
+    return mx >= x && my >= y && mx < x + w && my < y + h;
+}
+
+static void terminal_mouse(int x, int y, int w, int h, int mx, int my)
+{
+    int top = y + TM_TOOL_H;
+    int hist = history_rows();
+    int span = output_lines > hist ? output_lines - hist : 0;
+
+    if(in_box(mx, my, x + 8, y + 6, TM_BTN_W, TM_BTN_H))
+    {
+        output_lines = 0;
+        terminal_scroll = 0;
+    }
+    else if(in_box(mx, my, x + w - TM_SCROLL_W, top, TM_SCROLL_W, h - TM_TOOL_H))
+    {
+        if(my < top + (h - TM_TOOL_H) / 2)
+            terminal_scroll += hist;
+        else
+            terminal_scroll -= hist;
+
+        if(terminal_scroll > span)
+            terminal_scroll = span;
+
+        if(terminal_scroll < 0)
+            terminal_scroll = 0;
+    }
+}
+
 void handle_terminal_key(int key)
 {
     if(key == KEY_CTRL)
@@ -1068,9 +1408,9 @@ void handle_terminal_key(int key)
 
     if(key == KEY_UP)
     {
-        if(output_lines > 23 &&
+        if(output_lines > history_rows() &&
            terminal_scroll <
-           output_lines - 23)
+           output_lines - history_rows())
         {
             terminal_scroll++;
         }
@@ -1165,7 +1505,7 @@ static void terminal_icon(int x, int y, int s)
 const app_t terminal_app =
 {
     SCREEN_TERMINAL, "Terminal", "Terminal",
-    0, 0,
+    terminal_draw, terminal_mouse,
     handle_terminal_key, terminal_icon,
     0, 0, APP_TICK_VISIBLE,
     0, draw_terminal
