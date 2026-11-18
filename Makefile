@@ -3,6 +3,7 @@ AS = nasm
 
 CFLAGS = -ffreestanding -m32 -g -O0 -Wall -Wextra -I.
 LDFLAGS = -T linker.ld -m32 -nostdlib -lgcc
+VERSION = $(shell sed -n 's/.*TURBOS_VERSION "\(.*\)"/\1/p' kernel/version.h)
 
 C_SRC = \
 	kernel/main.c \
@@ -72,7 +73,7 @@ iso: kernel.bin grub.cfg
 	rm -rf isodir
 	mkdir -p isodir/boot/grub
 	cp kernel.bin isodir/boot/kernel.bin
-	cp grub.cfg isodir/boot/grub/grub.cfg
+	sed 's/@VERSION@/$(VERSION)/' grub.cfg > isodir/boot/grub/grub.cfg
 	grub2-mkrescue -o turbOS.iso isodir
 
 diskimg:

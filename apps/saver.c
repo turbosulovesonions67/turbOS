@@ -39,6 +39,35 @@ static void sv_tick(void)
     vga_surface_override(-1);
 }
 
+#define SV_BG GFX_RGB(12, 16, 40)
+#define SV_STAR GFX_RGB(110, 120, 170)
+#define SV_PILL GFX_RGB(0, 120, 215)
+#define SV_PILL_EDGE GFX_RGB(120, 190, 250)
+#define SV_DIM GFX_RGB(140, 150, 190)
+#define SV_PILL_H 36
+#define SV_STARS 14
+
+static void saver_draw(int x, int y, int w, int h)
+{
+    int pill_w = gfx_text_width("turbOS") + 32;
+    int px = x + saver_x * (w - pill_w) / 74;
+    int py = y + (saver_y - 1) * (h - SV_PILL_H) / 23;
+    int i;
+
+    gfx_fill_rect(x, y, w, h, SV_BG);
+
+    for(i = 0; i < SV_STARS; i++)
+        gfx_fill_rect(x + (i * 37 + 11) % 97 * w / 97,
+                      y + (i * 53 + 7) % 89 * h / 89, 2, 2, SV_STAR);
+
+    gfx_fill_rect(px, py, pill_w, SV_PILL_H, SV_PILL);
+    gfx_rect_outline(px, py, pill_w, SV_PILL_H, SV_PILL_EDGE);
+    gfx_draw_text(px + 16, py + 10, "turbOS", APP_WHITE);
+
+    gfx_draw_text(x + (w - gfx_text_width("Ctrl+2 Editor  Ctrl+3 Pong  Ctrl+4 Terminal")) / 2,
+                  y + h - 28, "Ctrl+2 Editor  Ctrl+3 Pong  Ctrl+4 Terminal", SV_DIM);
+}
+
 static void saver_icon(int x, int y, int s)
 {
         app_icon_box(x, y, s, 2, 4, 28, 24, GFX_RGB(31, 45, 99));
@@ -54,7 +83,7 @@ static void saver_icon(int x, int y, int s)
 const app_t saver_app =
 {
     SCREEN_SAVER, "Screen Saver", "Saver",
-    0, 0,
+    saver_draw, 0,
     0, saver_icon,
     sv_tick, 20, APP_TICK_VISIBLE,
     0, draw_saver
